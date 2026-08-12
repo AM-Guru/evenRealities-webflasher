@@ -126,6 +126,8 @@ const EMPTY_PROGRESS = {
   percent: 0,
 };
 
+const DEFAULT_EASY_UPDATE_METHOD = "bluetooth";
+
 // Name tokens observed on real hardware, merged with the built-in list. A G2
 // advertising a token nobody has recorded cannot be reached by a side-specific
 // name prefix, so remembering each one seen keeps the filter working for that
@@ -830,6 +832,15 @@ function BluetoothRecoveryCard({
 }) {
   const advanced = variant === "advanced";
   const primary = variant === "primary";
+  const cardFlashReady = primary
+    ? Boolean(
+        directBleSupported &&
+          selectedRelease &&
+          bleDevices.left &&
+          bleDevices.right &&
+          !operation,
+      )
+    : bleFlashReady;
   return (
     <article
       className={cx(
@@ -845,29 +856,35 @@ function BluetoothRecoveryCard({
             ? "Primary Smart Glasses update"
             : "02 · Pair + update over Bluetooth"}
         </div>
-        <h3>Update both temples directly over Bluetooth</h3>
+        <h3>
+          {primary
+            ? "Pair and update both temples"
+            : "Update both temples directly over Bluetooth"}
+        </h3>
         <p>
-          Chrome transfers every component in the selected hash-pinned package
-          to both temples simultaneously, using independent per-block
-          acknowledgements and component verification for each side. No Case
-          USB connection is required.
+          {primary
+            ? "Select the clearly labeled left and right temples. WebFlasher updates them together and verifies each side independently—no Case cable required."
+            : "Chrome transfers every component in the selected hash-pinned package to both temples simultaneously, using independent per-block acknowledgements and component verification for each side. No Case USB connection is required."}
         </p>
-        <ol>
-          <li>Remove both temples from the Case and keep them powered nearby.</li>
-          <li>
-            Disconnect the paired phone, then select the explicitly labeled
-            Left and Right devices below.
-          </li>
-          <li>
-            The chooser may list both sides, but this webflasher accepts only an
-            unambiguous side marker that matches the button you selected.
-          </li>
-          <li>
-            Keep this WebFlasher tab in front during the update. If it becomes
-            hidden, the webflasher pauses before the next OTA command and resumes
-            from that verified boundary when you return.
-          </li>
-        </ol>
+        <details className="ble-instructions" open={advanced}>
+          <summary>Before you begin</summary>
+          <ol>
+            <li>Remove both temples from the Case and keep them powered nearby.</li>
+            <li>
+              Disconnect the paired phone, then select the explicitly labeled
+              Left and Right devices below.
+            </li>
+            <li>
+              The chooser may list both sides, but this WebFlasher accepts only an
+              unambiguous side marker that matches the button you selected.
+            </li>
+            <li>
+              Keep this WebFlasher tab in front during the update. If it becomes
+              hidden, WebFlasher pauses before the next OTA command and resumes
+              from that verified boundary when you return.
+            </li>
+          </ol>
+        </details>
       </div>
       <div className="ble-recovery-actions">
         <div className="ble-device-buttons">
@@ -884,29 +901,31 @@ function BluetoothRecoveryCard({
             </Button>
           ))}
         </div>
-        <label className="ble-ready-confirm">
-          <input
-            type="checkbox"
-            checked={bleReady}
-            onChange={(event) => onReadyChange(event.target.checked)}
-            disabled={
-              !directBleSupported ||
-              !bleDevices.left ||
-              !bleDevices.right ||
-              Boolean(operation)
-            }
-          />
-          <span>
-            Both advertised names explicitly match their assigned physical
-            sides; the phone is disconnected and the temples will stay powered
-            and nearby; this WebFlasher tab will stay in front.
-          </span>
-        </label>
+        {!primary ? (
+          <label className="ble-ready-confirm">
+            <input
+              type="checkbox"
+              checked={bleReady}
+              onChange={(event) => onReadyChange(event.target.checked)}
+              disabled={
+                !directBleSupported ||
+                !bleDevices.left ||
+                !bleDevices.right ||
+                Boolean(operation)
+              }
+            />
+            <span>
+              Both advertised names explicitly match their assigned physical
+              sides; the phone is disconnected and the temples will stay powered
+              and nearby; this WebFlasher tab will stay in front.
+            </span>
+          </label>
+        ) : null}
         <Button
           className="ble-recovery-start"
-          onClick={onFlash}
+          onClick={() => onFlash({ bypassReadyConfirmation: primary })}
           busy={operation === "ble-temple-flash"}
-          disabled={!bleFlashReady}
+          disabled={!cardFlashReady}
         >
           Update{" "}
           {selectedRelease
@@ -1206,6 +1225,9 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [interfaceMode, setInterfaceMode] = useState(DEFAULT_INTERFACE_MODE);
+  const [easyUpdateMethod, setEasyUpdateMethod] = useState(
+    DEFAULT_EASY_UPDATE_METHOD,
+  );
   const [automaticInstallMode, setAutomaticInstallMode] = useState(
     DEFAULT_AUTOMATIC_INSTALL_MODE,
   );
@@ -2382,9 +2404,14 @@ function App() {
     }
   };
 
-  const flashBleTempleFirmware = async () => {
+  const flashBleTempleFirmware = async ({ bypassReadyConfirmation = false } = {}) => {
     const release = catalog.find((item) => item.id === selectedReleaseId);
-    if (!release || !bleDevices.left || !bleDevices.right || !bleReady) return;
+    if (
+      !release ||
+      !bleDevices.left ||
+      !bleDevices.right ||
+      (!bypassReadyConfirmation && !bleReady)
+    ) return;
     setBleRouteProgress({
       left: { ...EMPTY_BLE_ROUTE_PROGRESS.left },
       right: { ...EMPTY_BLE_ROUTE_PROGRESS.right },
@@ -3814,11 +3841,12 @@ function App() {
     bleResults?.outcome === "failed_or_partial";
   const bluetoothUpdateAwaitingCase =
     bleResults?.outcome === "awaiting_case_verification";
-  const usbRecoveryVisible =
+  const advancedUsbRecoveryVisible =
     !directBleSupported ||
     bluetoothUpdateFailed ||
     bluetoothUpdateAwaitingCase ||
     usbRecoveryRequested;
+  const easyUsesBluetooth = easyUpdateMethod === "bluetooth";
   const caseUpdateNeeded = Boolean(
     report?.console?.caseVersion &&
       latestCaseFirmwareRelease?.caseVersion &&
@@ -3841,6 +3869,10 @@ function App() {
       : directWebSerialSupported
         ? "Web Serial"
         : "Unavailable";
+  const footerTransportLabel =
+    interfaceMode === "easy" && easyUsesBluetooth
+      ? "Bluetooth"
+      : selectedTransport;
   const deviceAnalytics = useMemo(
     () =>
       report
@@ -3958,20 +3990,34 @@ function App() {
 
       <main className="main">
         <header className="topbar">
+          <a
+            className="topbar-brand"
+            href="#easy"
+            aria-label="Even Realities WebFlasher home"
+          >
+            <EvenRealitiesLogo />
+            <span className="topbar-product">WebFlasher</span>
+          </a>
           <div className="topbar-status">
             <span
               className={cx(
                 "connection-dot",
                 (interfaceMode === "easy"
-                  ? bleDevices.left && bleDevices.right
+                  ? easyUsesBluetooth
+                    ? bleDevices.left && bleDevices.right
+                    : report
                   : report) && "is-connected",
               )}
             />
             <span>
               {interfaceMode === "easy"
-                ? bleDevices.left && bleDevices.right
-                  ? "Left + Right paired"
-                  : "Bluetooth temples not paired"
+                ? easyUsesBluetooth
+                  ? bleDevices.left && bleDevices.right
+                    ? "Left + Right paired"
+                    : "Bluetooth temples not paired"
+                  : report
+                    ? "G2 Case connected"
+                    : "No G2 Case connected"
                 : report
                   ? "Case analyzed"
                   : "No Case connected"}
@@ -4021,33 +4067,129 @@ function App() {
           id="easy"
           data-pane="easy"
         >
-          <div className="easy-mode-toolbar">
-            <div className="eyebrow">Bluetooth Smart Glasses update</div>
-            <StatusPill
-              tone={
-                !directBleSupported
-                  ? "warm"
-                  : bluetoothUpdateAwaitingCase
-                    ? "warm"
-                    : bluetoothUpdateComplete ||
-                        (bleDevices.left && bleDevices.right)
-                      ? "success"
-                      : "quiet"
-              }
+          <div className="easy-transport-selector">
+            <div className="easy-transport-label">
+              <span>Update connection</span>
+              <small>Choose how WebFlasher reaches your G2.</small>
+            </div>
+            <div
+              className="easy-transport-options"
+              role="group"
+              aria-label="Easy Mode update connection"
             >
-              {!directBleSupported
-                ? "Bluetooth unavailable · use USB recovery"
-                : bluetoothUpdateAwaitingCase
-                  ? "Case verification required"
-                : bluetoothUpdateComplete
-                  ? "Bluetooth update complete"
-                  : bleDevices.left && bleDevices.right
-                    ? "Left + Right paired"
-                    : "Pair both temples"}
-            </StatusPill>
+              <button
+                type="button"
+                className={cx(easyUsesBluetooth && "is-active")}
+                aria-pressed={easyUsesBluetooth}
+                onClick={() => setEasyUpdateMethod("bluetooth")}
+                disabled={Boolean(operation)}
+              >
+                Bluetooth
+              </button>
+              <button
+                type="button"
+                className={cx(!easyUsesBluetooth && "is-active")}
+                aria-pressed={!easyUsesBluetooth}
+                onClick={() => setEasyUpdateMethod("usb")}
+                disabled={Boolean(operation)}
+              >
+                USB Case
+              </button>
+            </div>
+            <span className="easy-transport-detail">
+              {easyUsesBluetooth
+                ? "Wireless · left + right temples"
+                : "Case cable · both temples seated"}
+            </span>
           </div>
 
-          <div className="easy-mode-grid is-bluetooth-primary">
+          <div className="easy-hero">
+            <div className="easy-hero-copy">
+              <div className="eyebrow">Even Realities WebFlasher</div>
+              <h1>
+                Fresh firmware.
+                <br />
+                A clearer view.
+              </h1>
+              <p>
+                Official, verified updates for Even G2 and Even R1—handled
+                locally in your browser.
+              </p>
+              <div className="easy-hero-status">
+                <StatusPill
+                  tone={
+                    easyUsesBluetooth
+                      ? !directBleSupported || bluetoothUpdateAwaitingCase
+                        ? "warm"
+                        : bluetoothUpdateComplete ||
+                              (bleDevices.left && bleDevices.right)
+                          ? "success"
+                          : "quiet"
+                      : !serialSupported
+                        ? "warm"
+                        : report
+                          ? "success"
+                          : "quiet"
+                  }
+                >
+                  {easyUsesBluetooth
+                    ? !directBleSupported
+                      ? "Bluetooth unavailable · choose USB Case"
+                      : bluetoothUpdateAwaitingCase
+                        ? "Case verification required"
+                        : bluetoothUpdateComplete
+                          ? "Bluetooth update complete"
+                          : bleDevices.left && bleDevices.right
+                            ? "Left + Right paired"
+                            : "Ready to pair"
+                    : !serialSupported
+                      ? "USB access unavailable"
+                      : report
+                        ? "G2 Case connected"
+                        : "Ready for USB Case"}
+                </StatusPill>
+                <span className="local-only-note">
+                  <span className="tiny-dot tiny-dot-success" />
+                  Device data stays on this computer
+                </span>
+              </div>
+            </div>
+            <div className="easy-hero-visual" aria-hidden="true">
+              <img
+                src={webflasherAssetUrl("even-g2-case-grey.png")}
+                alt=""
+                width="1501"
+                height="1501"
+                draggable="false"
+              />
+              <span>Even G2</span>
+            </div>
+          </div>
+
+          <div className="easy-workflow-intro">
+            <div>
+              <div className="eyebrow">
+                {easyUsesBluetooth ? "Wireless update" : "USB recovery"}
+              </div>
+              <h2>
+                {easyUsesBluetooth
+                  ? "Update wirelessly. Both temples."
+                  : "One cable. Guided recovery."}
+              </h2>
+            </div>
+            <p>
+              {easyUsesBluetooth
+                ? "Choose official firmware, pair left and right, then keep this tab visible while WebFlasher verifies every component."
+                : "Choose official firmware, connect the G2 Case with both temples seated, then let WebFlasher recover and verify both sides."}
+            </p>
+          </div>
+
+          <div
+            className={cx(
+              "easy-mode-grid",
+              easyUsesBluetooth ? "is-bluetooth-primary" : "is-usb-primary",
+            )}
+          >
             <article className="easy-action-card easy-firmware-card">
               <div className="easy-step-heading">
                 <span>01</span>
@@ -4071,34 +4213,29 @@ function App() {
                   </option>
                 ))}
               </select>
-              {selectedRelease ? (
-                <div className="easy-release-summary">
-                  <strong>Official Stock firmware</strong>
-                  <span>{formatBytes(selectedRelease.size)}</span>
-                  <code>{selectedRelease.sha256.slice(0, 16)}…</code>
-                </div>
-              ) : null}
             </article>
 
-            <BluetoothRecoveryCard
-              variant="primary"
-              directBleSupported={directBleSupported}
-              operation={operation}
-              bleDevices={bleDevices}
-              onSelectTemple={selectBleTemple}
-              bleReady={bleReady}
-              onReadyChange={setBleReady}
-              bleFlashReady={bleFlashReady}
-              onFlash={flashBleTempleFirmware}
-              selectedRelease={selectedRelease}
-              bleResults={bleResults}
-              bleStatus={bleStatus}
-            />
+            {easyUsesBluetooth ? (
+              <BluetoothRecoveryCard
+                variant="primary"
+                directBleSupported={directBleSupported}
+                operation={operation}
+                bleDevices={bleDevices}
+                onSelectTemple={selectBleTemple}
+                bleReady={bleReady}
+                onReadyChange={setBleReady}
+                bleFlashReady={bleFlashReady}
+                onFlash={flashBleTempleFirmware}
+                selectedRelease={selectedRelease}
+                bleResults={bleResults}
+                bleStatus={bleStatus}
+              />
+            ) : null}
 
-            {usbRecoveryVisible ? (
+            {!easyUsesBluetooth ? (
               <article className="easy-action-card easy-usb-card easy-case-card">
                 <div className="easy-step-heading">
-                  <span>USB · 01</span>
+                  <span>02</span>
                   <div>
                     <strong>Select your G2 Case for recovery</strong>
                     <small>
@@ -4140,10 +4277,10 @@ function App() {
               </article>
             ) : null}
 
-            {usbRecoveryVisible ? (
+            {!easyUsesBluetooth ? (
               <article className="easy-action-card easy-apply-card easy-usb-card">
               <div className="easy-step-heading">
-                <span>USB · 02</span>
+                <span>03</span>
                 <div>
                   <strong>Recover automatically over USB</strong>
                   <small>
@@ -4309,6 +4446,7 @@ function App() {
               </article>
             ) : null}
           </div>
+          {easyUsesBluetooth ? (
           <article className="ring-update-panel" id="ring-update">
             <div className="ring-update-copy">
               <div className="eyebrow">R1 Ring firmware update</div>
@@ -4398,37 +4536,7 @@ function App() {
               </div>
             </div>
           </article>
-          <div className={cx("usb-recovery-toggle", usbRecoveryVisible && "is-open")}>
-            <div>
-              <strong>
-                {usbRecoveryVisible
-                  ? "USB backup / recovery"
-                  : "Can’t reach one or both temples over Bluetooth?"}
-              </strong>
-              <span>
-                {usbRecoveryVisible
-                  ? "These Case-based tools are the fallback for a failed or unavailable Bluetooth update, or for devices that are generally non-working or inaccessible over Bluetooth."
-                  : "Reveal the Case-based USB workflow only as a backup or recovery mechanism."}
-              </span>
-            </div>
-            {!usbRecoveryVisible ? (
-              <Button
-                tone="secondary"
-                onClick={() => setUsbRecoveryRequested(true)}
-                disabled={Boolean(operation)}
-              >
-                Open USB recovery
-              </Button>
-            ) : directBleSupported && !bluetoothUpdateFailed ? (
-              <Button
-                tone="ghost"
-                onClick={() => setUsbRecoveryRequested(false)}
-                disabled={Boolean(operation)}
-              >
-                Hide USB recovery
-              </Button>
-            ) : null}
-          </div>
+          ) : null}
         </section>
 
         <section
@@ -5044,7 +5152,7 @@ function App() {
                   ) : null}
                 </div>
               ) : null}
-              {usbRecoveryVisible ? (
+              {advancedUsbRecoveryVisible ? (
               <div className="advanced-automatic-apply">
                 <div className="advanced-usb-recovery-heading">
                   <div>
@@ -5918,7 +6026,7 @@ function App() {
           <div className="footer-meta">
             <span>
               Even Realities WebFlasher · build {WEBFLASHER_BUILD_LABEL} ·{" "}
-              {selectedTransport}
+              {footerTransportLabel}
             </span>
             <span>Device data stays local in this browser.</span>
           </div>

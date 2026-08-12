@@ -5883,7 +5883,7 @@ input:focus-visible {
 }
 
 .global-progress span {
-  background: var(--ink);
+  background: #d8cf31;
   box-shadow: none;
 }
 
@@ -6029,7 +6029,7 @@ input:focus-visible {
 
 .support-dot.is-supported,
 .connection-dot.is-connected {
-  background: var(--ink);
+  background: var(--mint);
   box-shadow: 0 0 0 4px var(--accent);
 }
 
@@ -6075,9 +6075,9 @@ input:focus-visible {
 }
 
 .console-trigger > span:last-child {
-  color: #fff;
+  color: var(--ink);
   border-radius: 0;
-  background: var(--ink);
+  background: var(--accent);
 }
 
 .hero {
@@ -6201,9 +6201,9 @@ input:focus-visible {
 .button-primary:hover:not(:disabled),
 .backup-card .button:hover:not(:disabled),
 .browser-compatibility-action:hover {
-  color: #fff;
-  border-color: var(--ink);
-  background: var(--ink);
+  color: var(--ink);
+  border-color: #ddd43a;
+  background: #f2eb58;
   box-shadow: none;
 }
 
@@ -6374,9 +6374,30 @@ input:focus-visible {
 .bank-row.is-active .bank-index,
 .recovery-step.is-ready .recovery-number,
 .recovery-step.is-complete .recovery-number {
-  color: #fff;
+  color: var(--ink);
   border-color: var(--ink);
-  background: var(--ink);
+  background: var(--accent);
+}
+
+.backup-graphic > div {
+  color: var(--ink);
+  border-color: var(--line-dark);
+  border-radius: 0;
+  background: #fafaf7;
+}
+
+.backup-graphic span,
+.backup-graphic > i {
+  color: #777771;
+}
+
+.backup-graphic b {
+  color: var(--ink);
+}
+
+.backup-graphic .option-block {
+  border-color: var(--ink);
+  background: var(--accent);
 }
 
 .empty-panel,
@@ -6530,17 +6551,23 @@ input:focus-visible {
 }
 
 .interface-mode-switch {
-  padding: 2px;
-  border-color: var(--ink);
+  padding: 1px;
+  border-color: var(--line-dark);
   border-radius: 0;
-  background: var(--ink);
+  background: #fff;
 }
 
 .interface-mode-switch button {
+  color: #74746f;
+  background: #fff;
   border-radius: 0;
   font-family: var(--sans);
   font-weight: 300;
   letter-spacing: 0.02em;
+}
+
+.interface-mode-switch button + button {
+  border-left: 1px solid var(--line);
 }
 
 .interface-mode-switch button.is-active {
@@ -6605,6 +6632,99 @@ input:focus-visible {
   background: #fff;
 }
 
+.analysis-action-panel,
+.shell-analysis,
+.shell-panel,
+.smart-glasses-recovery,
+.recovery-target-heading {
+  color: var(--ink);
+  border-color: var(--line);
+  border-radius: 0;
+  background: #fff;
+}
+
+.shell-panel {
+  background: #fafaf7;
+}
+
+.analysis-action-panel h3,
+.shell-analysis-heading h3,
+.glasses-analytics-heading h3,
+.smart-glasses-recovery-heading h3,
+.recovery-target-heading h3 {
+  color: var(--ink);
+  font-weight: 300;
+}
+
+.analysis-action-panel p,
+.shell-analysis-heading p,
+.smart-glasses-recovery-heading p,
+.recovery-target-heading p {
+  color: #6f6f6a;
+}
+
+.glasses-analytics-heading > div > span,
+.scope-label {
+  color: #777771;
+}
+
+.glasses-route-proof code,
+.shell-command-list span,
+.shell-temple span,
+.shell-recovery-proof strong,
+.smart-glasses-recovery-proof strong,
+.glasses-recovery-readiness strong {
+  color: var(--ink);
+}
+
+.shell-command-list,
+.shell-command-list > div,
+.shell-temple,
+.shell-panel pre,
+.smart-glasses-recovery-gate,
+.smart-glasses-recovery-proof {
+  border-color: var(--line);
+  border-radius: 0;
+}
+
+.shell-command-list code,
+.shell-temple strong {
+  color: var(--ink);
+}
+
+.shell-panel pre {
+  color: #3f6354;
+  background: #fff;
+}
+
+.writer-compatibility.is-compatible,
+.glasses-recovery-readiness.is-ready {
+  color: #205d47;
+  border-color: #91b9a9;
+  background: var(--mint-pale);
+}
+
+.smart-glasses-recovery-gate .done {
+  color: var(--ink);
+  background: #fffdee;
+}
+
+.smart-glasses-recovery-gate .done .icon {
+  color: var(--mint);
+}
+
+.smart-glasses-recovery-controls select {
+  color: var(--ink);
+  border-color: var(--line-dark);
+  border-radius: 0;
+  background: #fff;
+}
+
+.smart-glasses-recovery-proof .smart-glasses-recovery-boundary {
+  color: #792828;
+  background: #fff0f0;
+}
+
 .footer {
   color: #6f6f6a;
   border-color: var(--line);
@@ -6628,7 +6748,7 @@ input:focus-visible {
 
 .footer-progress-track span,
 .footer-ble-route .footer-progress-track span {
-  background: var(--ink);
+  background: #d8cf31;
   box-shadow: none;
 }
 
@@ -6703,5 +6823,565 @@ input:focus-visible {
 
   .main {
     margin-left: 0;
+  }
+}
+
+/* ------------------------------------------------ Even Realities editorial UI */
+
+.topbar-brand {
+  display: none;
+}
+
+.app-shell.is-easy .sidebar {
+  display: none;
+}
+
+.app-shell.is-easy .main {
+  margin-left: 0;
+}
+
+.app-shell.is-easy .topbar {
+  display: grid;
+  height: 64px;
+  padding: 0 24px;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(320px, 1fr);
+  align-items: center;
+  gap: 24px;
+}
+
+.app-shell.is-easy .topbar-brand {
+  display: inline-flex;
+  width: fit-content;
+  color: var(--ink);
+  text-decoration: none;
+  align-items: center;
+  gap: 14px;
+}
+
+.app-shell.is-easy .topbar-brand .even-realities-logo {
+  font-size: 16px;
+}
+
+.app-shell.is-easy .topbar-product {
+  padding-left: 14px;
+  color: #7e7e78;
+  border-left: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 300;
+  letter-spacing: 0.01em;
+}
+
+.app-shell.is-easy .topbar-status {
+  justify-self: center;
+}
+
+.app-shell.is-easy .topbar-actions {
+  justify-self: end;
+}
+
+.app-shell.is-easy .pane-viewport,
+.easy-mode-pane.pane.is-active {
+  background: #fff;
+}
+
+.easy-mode-pane.pane.is-active {
+  padding: 0 0 96px;
+}
+
+.easy-transport-selector {
+  display: grid;
+  min-height: 66px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 24px;
+}
+
+.easy-transport-label {
+  display: grid;
+  gap: 3px;
+}
+
+.easy-transport-label > span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.easy-transport-label small,
+.easy-transport-detail {
+  color: #777771;
+  font-size: 10px;
+  font-weight: 300;
+}
+
+.easy-transport-options {
+  display: grid;
+  padding: 1px;
+  border: 1px solid var(--line-dark);
+  background: #fff;
+  grid-template-columns: 1fr 1fr;
+}
+
+.easy-transport-options button {
+  min-width: 136px;
+  min-height: 40px;
+  padding: 0 18px;
+  color: #74746f;
+  border: 0;
+  background: #fff;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 300;
+  cursor: pointer;
+}
+
+.easy-transport-options button + button {
+  border-left: 1px solid var(--line);
+}
+
+.easy-transport-options button:hover:not(:disabled) {
+  color: var(--ink);
+  background: #fafaf7;
+}
+
+.easy-transport-options button.is-active {
+  color: var(--ink);
+  background: var(--accent);
+}
+
+.easy-transport-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.easy-transport-detail {
+  justify-self: end;
+}
+
+.easy-hero {
+  display: grid;
+  width: 100%;
+  min-height: min(510px, calc(100dvh - 64px));
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.easy-hero-copy {
+  display: flex;
+  padding: clamp(52px, 7vw, 104px) clamp(36px, 6vw, 92px);
+  flex-direction: column;
+  justify-content: center;
+}
+
+.easy-hero-copy .eyebrow {
+  color: #777771;
+}
+
+.easy-hero-copy h1 {
+  max-width: 680px;
+  margin: 24px 0 28px;
+  color: var(--ink);
+  font-size: clamp(50px, 6.3vw, 92px);
+  font-weight: 300;
+  letter-spacing: -0.068em;
+  line-height: 0.92;
+}
+
+.easy-hero-copy > p {
+  max-width: 510px;
+  margin: 0;
+  color: #686863;
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+.easy-hero-status {
+  display: flex;
+  margin-top: 34px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.easy-hero-status .status-pill {
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--ink);
+  border-color: var(--ink);
+  border-radius: 0;
+  background: var(--accent);
+}
+
+.local-only-note {
+  display: inline-flex;
+  color: #686863;
+  font-size: 10px;
+  align-items: center;
+  gap: 9px;
+}
+
+.local-only-note .tiny-dot {
+  background: var(--mint);
+  box-shadow: 0 0 0 4px rgba(40, 120, 91, 0.1);
+}
+
+.easy-hero-visual {
+  position: relative;
+  min-height: 420px;
+  overflow: hidden;
+  background: var(--accent);
+  isolation: isolate;
+}
+
+.easy-hero-visual::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(42vw, 560px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(35, 35, 35, 0.18);
+  border-radius: 50%;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.easy-hero-visual::after {
+  position: absolute;
+  inset: 24px;
+  border: 1px solid rgba(35, 35, 35, 0.13);
+  content: "";
+  z-index: -1;
+}
+
+.easy-hero-visual img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(110%, 760px);
+  max-width: none;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 28px 34px rgba(35, 35, 35, 0.18));
+  transform: translate(-50%, -49%) rotate(-4deg);
+  user-select: none;
+}
+
+.easy-hero-visual > span {
+  position: absolute;
+  top: 38px;
+  right: 38px;
+  color: var(--ink);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.easy-workflow-intro {
+  display: grid;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 78px 28px 34px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  align-items: end;
+  gap: 48px;
+}
+
+.easy-workflow-intro h2 {
+  max-width: 720px;
+  margin: 13px 0 0;
+  color: var(--ink);
+  font-size: clamp(38px, 5vw, 62px);
+  font-weight: 300;
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+}
+
+.easy-workflow-intro > p {
+  max-width: 430px;
+  margin: 0;
+  color: #777771;
+  font-size: 13px;
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+.easy-mode-grid.is-bluetooth-primary,
+.easy-mode-grid.is-usb-primary {
+  max-width: 1240px;
+  padding: 0 28px;
+  gap: 18px;
+}
+
+.easy-mode-grid.is-bluetooth-primary {
+  grid-template-columns: minmax(280px, 0.72fr) minmax(520px, 1.28fr);
+}
+
+.easy-mode-grid.is-usb-primary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.is-bluetooth-primary .easy-firmware-card,
+.is-usb-primary .easy-firmware-card {
+  min-height: 0;
+  padding: 28px;
+  border: 0;
+  background: var(--accent);
+}
+
+.is-bluetooth-primary .easy-firmware-card {
+  grid-column: auto;
+}
+
+.is-usb-primary .easy-firmware-card {
+  grid-column: 1 / -1;
+}
+
+.easy-firmware-card .easy-step-heading {
+  border-color: rgba(35, 35, 35, 0.22);
+}
+
+.easy-firmware-card .easy-step-heading > span {
+  min-width: 34px;
+  min-height: 34px;
+  color: var(--ink);
+  border-color: var(--ink);
+  background: #fff;
+  place-items: center;
+}
+
+.easy-firmware-card .easy-step-heading small,
+.easy-firmware-card .select-label {
+  color: rgba(35, 35, 35, 0.64);
+}
+
+.easy-firmware-card > select {
+  min-height: 48px;
+  background: #fff;
+}
+
+.ble-recovery-card.is-primary {
+  padding: 28px;
+  border-color: var(--line);
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(35, 35, 35, 0.08);
+  grid-column: auto;
+}
+
+.ble-recovery-card.is-primary .ble-recovery-copy h3 {
+  max-width: 390px;
+  margin: 12px 0 12px;
+  font-size: clamp(26px, 2.6vw, 38px);
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.ble-recovery-card.is-primary .ble-recovery-copy > p {
+  max-width: 440px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.ble-instructions {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ble-instructions summary {
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 400;
+  list-style-position: outside;
+}
+
+.ble-instructions ol {
+  margin-top: 12px;
+}
+
+.ble-recovery-card.is-primary .ble-recovery-actions {
+  align-content: center;
+}
+
+.ble-recovery-card.is-primary .ble-device-buttons .button,
+.ble-recovery-card.is-primary .ble-recovery-start {
+  min-height: 48px;
+}
+
+.ring-update-panel {
+  max-width: 1184px;
+  margin: 20px auto 0;
+  padding: 32px;
+  border: 0;
+  background: #f3f3ef;
+  gap: 44px;
+}
+
+.ring-update-copy h3 {
+  margin-top: 10px;
+  font-size: clamp(24px, 2.5vw, 36px);
+  font-weight: 300;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.ring-update-panel select {
+  min-height: 46px;
+  padding: 0 12px;
+}
+
+.usb-recovery-toggle {
+  max-width: 1184px;
+  margin: 20px auto 0;
+  padding: 22px 24px;
+  border-color: var(--line);
+  background: #fff;
+}
+
+@media (max-width: 1080px) {
+  .app-shell.is-easy .topbar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .app-shell.is-easy .topbar-status {
+    display: none;
+  }
+
+  .easy-transport-selector {
+    grid-template-columns: 1fr auto;
+  }
+
+  .easy-transport-detail {
+    display: none;
+  }
+
+  .easy-mode-grid.is-bluetooth-primary {
+    grid-template-columns: 1fr;
+  }
+
+  .ble-recovery-card.is-primary {
+    grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell.is-easy .topbar {
+    min-height: 64px;
+    padding: 10px 16px;
+    gap: 12px;
+  }
+
+  .app-shell.is-easy .topbar-product,
+  .app-shell.is-easy .console-trigger > .icon,
+  .app-shell.is-easy .console-trigger > span:not(:last-child) {
+    display: none;
+  }
+
+  .app-shell.is-easy .topbar-actions {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+
+  .app-shell.is-easy .console-trigger {
+    width: 38px;
+    padding: 0;
+  }
+
+  .easy-transport-selector {
+    padding: 14px 16px;
+    grid-template-columns: 1fr;
+    gap: 11px;
+  }
+
+  .easy-transport-options {
+    width: 100%;
+  }
+
+  .easy-transport-options button {
+    min-width: 0;
+  }
+
+  .easy-hero {
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .easy-hero-copy {
+    padding: 54px 24px 48px;
+  }
+
+  .easy-hero-copy h1 {
+    margin: 20px 0 24px;
+    font-size: clamp(48px, 14vw, 66px);
+  }
+
+  .easy-hero-visual {
+    min-height: 330px;
+  }
+
+  .easy-hero-visual::before {
+    width: 76vw;
+  }
+
+  .easy-workflow-intro {
+    padding: 58px 20px 28px;
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+
+  .easy-mode-grid.is-bluetooth-primary,
+  .easy-mode-grid.is-usb-primary {
+    padding: 0 20px;
+    grid-template-columns: 1fr;
+  }
+
+  .ble-recovery-card.is-primary,
+  .ring-update-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .ring-update-panel,
+  .usb-recovery-toggle {
+    margin-right: 20px;
+    margin-left: 20px;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell.is-easy .topbar-brand .even-realities-logo {
+    font-size: 14px;
+  }
+
+  .app-shell.is-easy .topbar-brand .even-realities-logo svg {
+    width: 16px;
+  }
+
+  .app-shell.is-easy .interface-mode-switch button {
+    padding: 0 9px;
+    font-size: 9px;
+  }
+
+  .app-shell.is-easy .console-trigger {
+    display: none;
+  }
+
+  .easy-hero-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .easy-firmware-card,
+  .ble-recovery-card.is-primary,
+  .ring-update-panel {
+    padding: 22px;
+  }
+
+  .ble-device-buttons {
+    grid-template-columns: 1fr;
   }
 }
