@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.0.6.0005",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/37c8d118670c97f3e218c4a5f2f30951.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:39.026Z",
+  "sourceFile": "r1-2.0.6.0005-37c8d118670c97f3e218c4a5f2f30951.zip",
+  "sourceMd5": "37c8d118670c97f3e218c4a5f2f30951",
+  "sourceSha256": "5ef38db1e80a40859dd14e2914732193d8e3162ef118e37173e3fa45125d1d85",
+  "sourceSize": 622931,
+  "minAppVersion": "2.0.6",
+  "notes": "Optimized R1 power efficiency for longer battery life and fixed abnormal collection for certain health metrics.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 622300,
+    "binSha256": "5ef4eb77076c1054bf95c7781787963607a6a61af4b338cb98c39ca7fa7831b6",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "376d60acc327068dd7c1fe4d3133c32a512b762bde19ef00866432f71e2aba4d"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

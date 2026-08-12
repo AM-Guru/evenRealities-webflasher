@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.0.5.0004",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/3f7990f1d725be5c544103dc03e1ae54.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:39.297Z",
+  "sourceFile": "r1-2.0.5.0004-3f7990f1d725be5c544103dc03e1ae54.zip",
+  "sourceMd5": "3f7990f1d725be5c544103dc03e1ae54",
+  "sourceSha256": "893e9c72e5ad1ef2950309c4ed48a81af8bbedd920240d8bf6ebf4be122b5763",
+  "sourceSize": 618755,
+  "minAppVersion": "2.0.5",
+  "notes": "Optimized the SpO2 measurement algorithm and fixed Bluetooth connection and crash issues.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 618124,
+    "binSha256": "5fb80f2f4f1cc37299bdfc9695d08c13d5d5052dfd64d485852aba098d66dcec",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "afa75e575683db8a219c4b01ac9a0b32c76c6dcea2ea71f7db5ccf7bdd632eba"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.2.7.0005",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/be359b28954f8fe4a94ec21a58415d59.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:37.411Z",
+  "sourceFile": "r1-2.2.7.0005-be359b28954f8fe4a94ec21a58415d59.zip",
+  "sourceMd5": "be359b28954f8fe4a94ec21a58415d59",
+  "sourceSha256": "6222e4bb334b531c3d2cfedfae2a26f609f0ffd99bd60a50bc8cced645c9eba5",
+  "sourceSize": 650007,
+  "minAppVersion": "2.2.7",
+  "notes": "Enhanced Bluetooth connection stability and fixed health data collection failures in specific scenarios.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 649376,
+    "binSha256": "2d38253e00b887ced3f1e2c049db21254b0974091bc954a82c13e21c48b064c2",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "68447d4dfc0ad7d77270797fe0dbf4311faef7eb5e275342033e5b373be93be9"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

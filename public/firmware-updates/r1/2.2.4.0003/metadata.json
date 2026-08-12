@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.2.4.0003",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/248978eb758a342a0254d6dae45bfdb2.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:38.090Z",
+  "sourceFile": "r1-2.2.4.0003-248978eb758a342a0254d6dae45bfdb2.zip",
+  "sourceMd5": "248978eb758a342a0254d6dae45bfdb2",
+  "sourceSha256": "549d60061c1cc9cde94da5c3c0efc0e7220272aca6c872c49bde0ec30ae16dcc",
+  "sourceSize": 638259,
+  "minAppVersion": "2.2.4",
+  "notes": "Update both Even G2 and R1 to 2.2.4 to prevent Bluetooth issues. Adds hand preference settings, improves Bluetooth stability, and adds the R1 battery level to Dashboard.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 637628,
+    "binSha256": "a347128b46bfb01e6c02bc2a93768bc0838ae73c1e7ad401dd29841cc930647f",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "56f017384d7bbc73f47f018b601dd13bceda3f27f4b09f2f89586981c1429e0e"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

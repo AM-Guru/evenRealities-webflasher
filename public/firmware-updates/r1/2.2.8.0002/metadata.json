@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.2.8.0002",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/ce5aa289bf6c95a293d41bd48c123e40.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:37.217Z",
+  "sourceFile": "r1-2.2.8.0002-ce5aa289bf6c95a293d41bd48c123e40.zip",
+  "sourceMd5": "ce5aa289bf6c95a293d41bd48c123e40",
+  "sourceSha256": "662ca213e628f6bd82b8cd930bd63d6c1efe00b6f470fd6ed21e6367712bfdb7",
+  "sourceSize": 650915,
+  "minAppVersion": "2.2.8",
+  "notes": "Bug fixes.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 650284,
+    "binSha256": "41ea4fdcf1b2d1d3702c41669983b4ef0817ee4eb789f8eebc7dd6102609e274",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "1b9ede75c2d95b6d97e5b51dc396e0433d2575c4e04f63cc77e26218ccf13ea8"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

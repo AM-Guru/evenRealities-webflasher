@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.0.8.0012",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/90a6479e4d736365192f30556cba44a5.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:38.602Z",
+  "sourceFile": "r1-2.0.8.0012-90a6479e4d736365192f30556cba44a5.zip",
+  "sourceMd5": "90a6479e4d736365192f30556cba44a5",
+  "sourceSha256": "6bc6567f656d3905683000278af529ad516f45d8e9516618ffad2cb4ea7adf2b",
+  "sourceSize": 626207,
+  "minAppVersion": "2.0.8",
+  "notes": "Fixed potential system crashes and abnormal power consumption in certain scenarios.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 625576,
+    "binSha256": "8a3db3c56bf4cddd0a02eebc4090857f6e8907ae2108ce9487f8b8bdee7c96df",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "fb80c99d3eba14e8ae80ca7908bdb3bb928e5829968f37f247a8b7e3041f7c63"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

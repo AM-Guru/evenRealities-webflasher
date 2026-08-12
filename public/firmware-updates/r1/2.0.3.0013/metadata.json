@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.0.3.0013",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/da3c754078c1e9dd0b2fe282e4614783.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:39.506Z",
+  "sourceFile": "r1-2.0.3.0013-da3c754078c1e9dd0b2fe282e4614783.zip",
+  "sourceMd5": "da3c754078c1e9dd0b2fe282e4614783",
+  "sourceSha256": "a24ddd6c580a2706f98c06b6504bb34af7159024ad8bb066eca6ae684e533c6f",
+  "sourceSize": 619023,
+  "minAppVersion": "2.0.4",
+  "notes": "Improves Bluetooth stability and optimizes battery life.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 618392,
+    "binSha256": "c74c61beb5c30f671d2094a3f9a9310dbb556e7cf01d73c77dfca66d31a2b590",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "816e350b7d36240b7e33252141680baf39da06f7619bb1e51d80df83d73068b5"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

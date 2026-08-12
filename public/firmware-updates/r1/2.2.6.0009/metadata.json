@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.2.6.0009",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/9eca8ae9d5117abda4f72f39bdb44ad2.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:37.614Z",
+  "sourceFile": "r1-2.2.6.0009-9eca8ae9d5117abda4f72f39bdb44ad2.zip",
+  "sourceMd5": "9eca8ae9d5117abda4f72f39bdb44ad2",
+  "sourceSha256": "492baf487734720732f82f404624e0c3b3af3b01d30727366238e154164ad0dd",
+  "sourceSize": 647039,
+  "minAppVersion": "2.2.6",
+  "notes": "Updated the sleep algorithm to improve measurement accuracy; bug fixes.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 646408,
+    "binSha256": "0e788d433ea50fd36edb8f21a9c18b6062211e4a36dbc5bd7695ea5827f3aa1a",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "305da36784e527b3e434f2cf45019a290bf5c14cbceb2e57c9e61dcdfdb1f253"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

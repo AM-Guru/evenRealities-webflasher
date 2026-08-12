@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities G2",
+  "version": "2.0.6.14",
+  "internalVersion": "2.0.6.14",
+  "reportedVersion": "2.0.6.14",
+  "channel": "official",
+  "trust": "official-pinned",
+  "hardwareValidated": false,
+  "baseVersion": null,
+  "notes": null,
+  "capabilities": [],
+  "caseVersion": "1.2.54",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/0c9f9ca58785547278a5103bc6ae7a09.bin",
+  "archivedFrom": "Even Realities CDN",
+  "sourceFile": "0c9f9ca58785547278a5103bc6ae7a09.bin",
+  "sourceMd5": "0c9f9ca58785547278a5103bc6ae7a09",
+  "sourceSha256": "f3c4c40aa122f61e859b82ee5eaa296ac8fa3a96e7b9905fd8d112ded732c5da",
+  "sourceSize": 3954281,
+  "patchUrl": null,
+  "patchFile": null,
+  "patchSha256": null,
+  "manifestFile": null,
+  "manifestSha256": null,
+  "archivedAt": "2026-08-11T02:44:26.043Z",
+  "mainFirmware": {
+    "runBase": "0x00438000",
+    "installedImageSize": 3184952,
+    "installedImageEnd": "0x00741938",
+    "crc32": "33a89446"
+  },
+  "components": [
+    {
+      "name": "firmware/codec.bin",
+      "typeId": 4,
+      "size": 319372,
+      "crc32c": "ed6ad847",
+      "sha256": "1c1462aff542d41429203e3a5d4cd53696f973133203cc44b9ae01523a551d03"
+    },
+    {
+      "name": "firmware/ble_em9305.bin",
+      "typeId": 5,
+      "size": 211948,
+      "crc32c": "c074baf7",
+      "sha256": "91a38f7fc05555f86181ecb22b363e3239bfcaaa2ff6171e98524ae64821eca9"
+    },
+    {
+      "name": "firmware/touch.bin",
+      "typeId": 3,
+      "size": 34080,
+      "crc32c": "419965b4",
+      "sha256": "35c49f3040fd75e251a2957d746f6ebc7c8a8401741f4d2ca8c33bffb3e0b823"
+    },
+    {
+      "name": "firmware/box.bin",
+      "typeId": 6,
+      "size": 55296,
+      "crc32c": "f0c5546f",
+      "sha256": "d290f2b6899e69288b2b07b2d52471f193a4bf065f3eefe664c5a89aeadecb52"
+    },
+    {
+      "name": "ota/s200_bootloader.bin",
+      "typeId": 1,
+      "size": 147657,
+      "crc32c": "714713a7",
+      "sha256": "9c3c33b5632d0b3d074ae257ff5a31109d73e7330e833d9894b6598ebe2ba42f"
+    },
+    {
+      "name": "ota/s200_firmware_ota.bin",
+      "typeId": 0,
+      "size": 3184984,
+      "crc32c": "12588627",
+      "sha256": "e295640f17a9a6c48734960f003ab663cf34b6835b212afa042db3c5703f5462"
+    }
+  ],
+  "files": [
+    {
+      "name": "0c9f9ca58785547278a5103bc6ae7a09.bin",
+      "size": 3954281,
+      "sha256": "f3c4c40aa122f61e859b82ee5eaa296ac8fa3a96e7b9905fd8d112ded732c5da"
+    },
+    {
+      "name": "firmware_codec.bin",
+      "size": 319372,
+      "sha256": "1c1462aff542d41429203e3a5d4cd53696f973133203cc44b9ae01523a551d03"
+    },
+    {
+      "name": "firmware_ble_em9305.bin",
+      "size": 211948,
+      "sha256": "91a38f7fc05555f86181ecb22b363e3239bfcaaa2ff6171e98524ae64821eca9"
+    },
+    {
+      "name": "firmware_touch.bin",
+      "size": 34080,
+      "sha256": "35c49f3040fd75e251a2957d746f6ebc7c8a8401741f4d2ca8c33bffb3e0b823"
+    },
+    {
+      "name": "firmware_box.bin",
+      "size": 55296,
+      "sha256": "d290f2b6899e69288b2b07b2d52471f193a4bf065f3eefe664c5a89aeadecb52"
+    },
+    {
+      "name": "firmware_box.raw.bin",
+      "size": 55264,
+      "sha256": "5254c6911c050bfdd97437818adef53566eff68655238fd154a520497a4ab1a4"
+    },
+    {
+      "name": "ota_s200_bootloader.bin",
+      "size": 147657,
+      "sha256": "9c3c33b5632d0b3d074ae257ff5a31109d73e7330e833d9894b6598ebe2ba42f"
+    },
+    {
+      "name": "ota_s200_firmware_ota.bin",
+      "size": 3184984,
+      "sha256": "e295640f17a9a6c48734960f003ab663cf34b6835b212afa042db3c5703f5462"
+    }
+  ]
+}

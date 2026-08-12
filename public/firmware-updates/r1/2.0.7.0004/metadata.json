@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.0.7.0004",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/692af8c7baed67e20c5920d350dd466e.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:38.831Z",
+  "sourceFile": "r1-2.0.7.0004-692af8c7baed67e20c5920d350dd466e.zip",
+  "sourceMd5": "692af8c7baed67e20c5920d350dd466e",
+  "sourceSha256": "ba499025ab86cf3679eb5f19e6322422c1ef7f3304ce386f7e1e1dddf7ef5e08",
+  "sourceSize": 628831,
+  "minAppVersion": "2.0.7",
+  "notes": "Added the ability to restart R1 from the app and fixed Touch Sensor unresponsiveness in certain scenarios.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 628200,
+    "binSha256": "1045569b5ca10cdb6c3991304f8b7273c18cd302b28d65f2647ed947984c8f2a",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "3b9fc345ca31f709732debfa5cc81b00dfb78ed56f90e592ca82287249fd4dcc"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

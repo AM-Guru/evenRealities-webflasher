@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.2.5.0005",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/83038dad13c339f9e5f2e5fc828a00b3.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:37.826Z",
+  "sourceFile": "r1-2.2.5.0005-83038dad13c339f9e5f2e5fc828a00b3.zip",
+  "sourceMd5": "83038dad13c339f9e5f2e5fc828a00b3",
+  "sourceSha256": "46102dd54d86fb24fb5f1a2c8ba9f9d54e6a603659240dd59fc43b1ee564e778",
+  "sourceSize": 644583,
+  "minAppVersion": "2.2.5",
+  "notes": "Updated Calorie goals to Active Calories in Health and optimized R1 health data syncing in specific scenarios.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 643952,
+    "binSha256": "221fb44aa6ff954dc73978d3848ed466913e2bebcfada4aaa8984610d7e2a6e2",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "e4518bc50ee225024cca96dd581d955f9650dc8b0450060fa7b22b9ccf4c0847"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}

@@ -1,0 +1,73 @@
+# Dependencies
+/node_modules/
+/.pnp
+.pnp.*
+
+# Vite and production builds
+/dist/
+/.vite/
+/.vinext/
+/.wrangler/
+*.tsbuildinfo
+*.eslintcache
+
+# Tests and generated reports
+/coverage/
+/test-results/
+/playwright-report/
+/.nyc_output/
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# Firmware archives and device-specific captures
+/firmware-archive/
+/backups/
+/captures/
+/dumps/
+/g2-*-audit*.json
+*.g2case-backup.json
+*.g2case-backup
+
+# Local task and tool output
+/outputs/
+/work/
+/.codex/
+/.openai/
+/.worktrees/
+/.claude/
+
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+.venv/
+/venv/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig

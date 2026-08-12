@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities R1",
+  "version": "2.2.0.0014",
+  "channel": "official",
+  "trust": "official-pinned",
+  "format": "nordic-secure-dfu",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/9ae5429275afdcb2ff86c53152bef1cb.zip",
+  "archivedFrom": "Even Realities CDN",
+  "archivedAt": "2026-08-11T02:44:38.303Z",
+  "sourceFile": "r1-2.2.0.0014-9ae5429275afdcb2ff86c53152bef1cb.zip",
+  "sourceMd5": "9ae5429275afdcb2ff86c53152bef1cb",
+  "sourceSha256": "9ce535518d1321a27186394355e05aff7b4ba76be58c8de1a0dfcf3b01395d00",
+  "sourceSize": 633367,
+  "minAppVersion": "2.2.0",
+  "notes": "Charging, Bluetooth, and touch sensor bug fixes.",
+  "application": {
+    "binFile": "application.bin",
+    "binSize": 632736,
+    "binSha256": "590584f3d56dc4b495d6454823fe177f042225b55c7d098abab479041f641d36",
+    "datFile": "application.dat",
+    "datSize": 141,
+    "datSha256": "e77d2fdf34eb94e3d955e0b23e0913b4622d46c9f9aa5b5ff0b8cc29f23a85c1"
+  },
+  "initPacket": {
+    "applicationVersion": 3,
+    "hardwareVersion": 52,
+    "softDeviceFirmwareIds": [
+      256
+    ],
+    "signed": true
+  }
+}
