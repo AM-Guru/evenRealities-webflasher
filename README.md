@@ -32,13 +32,16 @@ GitHub Pages target:
   physical bank, fallback physical bank, and the firmware visible in each bank.
 - Downloads one combined recovery set containing a complete 512 KiB case
   flash backup, the 128-byte case option block, checksum-validated identity
-  snapshots from both seated temples, and the matching digest-pinned official
-  Smart Glasses firmware bundle.
+  snapshots from both seated temples, and each route's matching digest-pinned
+  official Smart Glasses firmware bundle. A split-version pair — the usual
+  remnant of an interrupted cross-version update — is backed up with per-route
+  official bundles rather than refused, and a version absent from the archive
+  is recorded as an explicit omission while the live snapshots are captured.
 - Accepts official five- or six-component `EVENOTA` bundles, wrapped
   `firmware_box.bin` components, and validated raw case images.
-- Recognizes and offers all 14 archived official G2 SHA-256 values. Custom
+- Recognizes and offers all 15 archived official G2 SHA-256 values. Custom
   firmware is excluded from the catalog and both installation paths.
-- Offers all 11 archived official R1 releases through signed Nordic Secure
+- Offers all 12 archived official R1 releases through signed Nordic Secure
   DFU; bootloader unlocking and owner-key replacement are not included.
 - Validates the Apollo main application's independent preamble, CRC-32, target
   region, installed-image boundary, and vector.
@@ -219,10 +222,12 @@ the captured protocol evidence that this grammar carries no destination
 block index, this keeps DATA recovery fail-closed. The host also requires one fresh
 checksum-valid read-only version reply immediately before the first OTA
 command, waits 1 second at each 6-KiB handoff, increases that to 2 seconds
-after 75%, and doubles both values for a restarted component. One fourth
-full-component attempt is reserved for an exact retained status-16 host
-timeout after complete route restoration, Case 1.2.57 return, and bilateral
-reset/liveness; that final attempt uses triple pacing. The final DATA
+after 75%, and doubles both values for a restarted component. The
+whole-component restart budget is four after a verified DATA failure with
+exact cleanup proof, and six for the exact retained status-16 host timeout
+with complete route restoration, Case 1.2.57 return, and bilateral
+reset/liveness; intermediate restarts use doubled pacing and the
+budget-exhausting restart uses triple pacing. The final DATA
 record gets a 15-second settle, 30 seconds on a normal restart, or 45 seconds
 on the status-16 final recovery, with
 host-only keepalives. Success requires both the checksum-valid zero-status
@@ -273,6 +278,18 @@ third attempt rejected record 34 and provided no stronger recovery evidence.
 The host now records command, status, record, accepted bytes and target size
 for explicit rejections and stops after the second clustered boundary while
 still performing verified cleanup and final bilateral liveness.
+
+A silent DATA record — no reply at all — is handled separately from an
+explicit rejection. The DATA handler settles for 2, 8, then 20 seconds and
+retransmits the identical record with the identical sequence byte, bounded to
+three resends per record and twelve per component attempt. The temple's own
+sequence guard accepts only the record it expects; a status-1 rejection of a
+resend proves the lost-acknowledgement case and advances to the next record.
+An explicitly rejected first transmission still ends the component attempt,
+and a silent record does not escalate the remembered pacing level. The same
+recovery work corrects bilateral verification for one-route repairs: a seated
+temple outside the selected route is checked for liveness rather than asserted
+at a version this run never installed.
 
 The first 100-query gate was retired after a fresh hardware comparison showed
 the live left route fail at query 52 and the already verified-stock right
@@ -593,11 +610,14 @@ fresh seated-route telemetry, the complete bundle SHA-256, the Apollo-main
 payload SHA-256, hardware revision 5, and explicit user confirmations.
 
 The host uses 32-byte stop-and-wait USB chunks and replays no START, HEADER,
-DATA, or FINISH transaction. An explicit DATA rejection or ambiguous reply
-ends that component attempt. After exact cleanup, bilateral reset, contact and
-liveness proof, Easy Mode may begin a fresh full component, with three normal
-attempts and doubled pacing on restarts. An exact retained status-16 host
-timeout can unlock one final triple-paced attempt after the same reset and
+or FINISH transaction; the one bounded exception is a silent DATA record,
+which is retransmitted in place with identical bytes and sequence under the
+temple's own sequence guard. An explicit DATA rejection or ambiguous reply
+still ends that component attempt. After exact cleanup, bilateral reset,
+contact and liveness proof, Easy Mode may begin a fresh full component within
+the four-restart budget, with doubled pacing on intermediate restarts. An
+exact retained status-16 host timeout widens the budget to six, with the
+budget-exhausting attempt triple-paced after the same reset and
 liveness proof. V6 rejects a mutating setup before
 temple transmission when the Case idle-route phase does not match the selected
 side. A bilateral run may reorder left/right in either direction only from an
@@ -900,7 +920,8 @@ Automatic Apply handles the reviewed failure boundaries as follows:
 | Read-only YHM baseline is outside the active seated-idle profile | Retry only from exact retained zero-write/zero-transmission proof; switch once to a separately pinned exact profile when recognized, otherwise let the stock app settle for 15 then 45 seconds and re-confirm Case/contact before each probe |
 | Allowlisted zero-write YHM setup stop | Perform the bounded settle and setup reset/recheck ladder; if every attempt stops before route selection with immutable zero-byte proof, preserve completed routes, stop wired retries, and direct the operator to fresh Bluetooth full-package recovery |
 | Incomplete cached `G2RX` header or payload | Passively scan for a complete same-sequence checksum-valid cached frame; never replay the temple request |
-| Exact retained status-16 DATA host timeout after normal retries | Prove byte-for-byte route cleanup, Case 1.2.57, bilateral reset/contact/liveness, then allow one final triple-paced full-component restart |
+| Exact retained status-16 DATA host timeout after normal retries | Prove byte-for-byte route cleanup, Case 1.2.57, bilateral reset/contact/liveness, then widen the restart budget to six with the final restart triple-paced |
+| Silent DATA record (no reply, no acceptance, zero UART/host errors) | Settle 2 s / 8 s / 20 s and resend the identical record in place under the temple's sequence guard, at most 3 per record and 12 per attempt; never escalates pacing memory |
 | Two restored explicit DATA rejections recur within 64 records on the same route and target | Classify a persistent receiver/storage boundary, skip the third full-component attempt, restore the Case, and finish with bilateral liveness |
 | First final-reset contact, telemetry, banner, YHM, or no-frame check is transient | Wait, issue one bounded second `DEB0`, and repeat the full liveness gate |
 | Any transfer mutation, cleanup ambiguity, wrong hardware/version after transfer, or second reset failure | Stop closed and retain the failure audit |
@@ -1069,7 +1090,7 @@ and both routes receive read-only liveness verification.
 
 ## Firmware archive
 
-The archive builder offers all 14 official G2 releases represented by the
+The archive builder offers all 15 official G2 releases represented by the
 evidence included in this repository. It also verifies and archives every R1 Secure DFU package
 exposed by the authenticated compatibility API, with exact CDN size, MD5,
 SHA-256, application, and signed init-packet pins:
@@ -1078,13 +1099,13 @@ SHA-256, application, and signed init-packet pins:
 2.0.1.14  2.0.3.20  2.0.5.12  2.0.6.14
 2.0.7.16  2.0.8.20  2.0.9.20  2.1.1.8
 2.1.1.12  2.2.0.24  2.2.4.34  2.2.6.10
-2.2.7.14  2.2.8.4
+2.2.7.14  2.2.8.4  2.2.9.22
 ```
 
 ```text
 R1: 2.0.3.0013  2.0.5.0004  2.0.6.0005  2.0.7.0004
     2.0.8.0012  2.2.0.0014  2.2.4.0003  2.2.5.0005
-    2.2.6.0009  2.2.7.0005  2.2.8.0002
+    2.2.6.0009  2.2.7.0005  2.2.8.0002  2.2.9.0003
 ```
 
 It uses the firmware packages already included under `public/` as its local
@@ -1110,6 +1131,9 @@ original bundle, extracted components, metadata, and checksums:
 firmware-archive/
   index.json
   g2/
+    2.2.9.22/
+      fc250b05e98a9ff998b4b68f5f99f994.bin
+      ...
     2.2.8.4/
       d495a1dffb919795e95135e144345f04.bin
       firmware_codec.bin

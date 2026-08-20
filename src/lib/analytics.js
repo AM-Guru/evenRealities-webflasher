@@ -67,11 +67,16 @@ function templeAnalytics(side, present, results) {
           : "not-analyzed";
   const firmwareVersion = version?.decoded?.firmwareVersion ?? null;
   const hardwareRevision = version?.decoded?.hardwareRevision ?? null;
+  // A Case-side ROM/serial transport failure happens before the bridge ever
+  // queries the temple, so it carries no evidence about temple liveness.
+  const caseTransportFailure = Boolean(results?.lastProbeFailure?.caseTransport);
   const applicationResponsive =
     analysisState === "not-analyzed"
       ? null
       : analysisState === "failed"
-        ? false
+        ? caseTransportFailure
+          ? null
+          : false
         : true;
   const completeMainWriterCompatible = version
     ? Boolean(firmwareVersion && hardwareRevision === 5)
@@ -85,6 +90,8 @@ function templeAnalytics(side, present, results) {
     side,
     present: Boolean(present),
     analysisState,
+    caseTransportFailure:
+      analysisState === "failed" ? caseTransportFailure : false,
     lastProbeFailure: results?.lastProbeFailure
       ? { ...results.lastProbeFailure }
       : null,
@@ -99,7 +106,9 @@ function templeAnalytics(side, present, results) {
     bootStateBoundary:
       applicationResponsive === false
         ? "The Case bridge did not receive an Application-mode reply. It cannot distinguish Apollo recovery/bootloader state from a rebooting, charging-negotiation, or otherwise silent application."
-        : null,
+        : analysisState === "failed" && caseTransportFailure
+          ? "The Case-side STM32 ROM/serial transport failed before the reviewed bridge could query this temple; the failure carries no evidence about the temple state."
+          : null,
     firmwareVersion,
     hardwareRevision,
     batteryPercent: status?.decoded?.batteryPercent ?? null,
@@ -276,10 +285,15 @@ export function buildG2DeviceAnalytics({
         right.present &&
         bothTemplesResponsive &&
         bothTemplesWriterCompatible;
+  // A Case-side transport failure is "analyzed" in the sense that a probe ran,
+  // but it proves nothing about the temple, so the plan must ask for a fresh
+  // analysis instead of a recovery step chosen on zero temple evidence.
+  const planState = (temple) =>
+    temple.caseTransportFailure ? "case-transport-failure" : temple.bootState;
   const minimumPlan = bothTemplesAnalyzed
     ? minimumAutomaticRecoveryPlan({
-        left: { state: left.bootState },
-        right: { state: right.bootState },
+        left: { state: planState(left) },
+        right: { state: planState(right) },
       })
     : {
         action: "probe-applications",
@@ -350,6 +364,23 @@ export function buildG2DeviceAnalytics({
       contactAssessment,
       left,
       right,
+      // A pair reporting two different versions is the fingerprint of an
+      // interrupted cross-version update — one route completed, the other
+      // kept its source image. It is a recoverable state, not damage: both
+      // applications answer, and converging the off-target route (Automatic
+      // Apply, or a one-route complete-main install) heals the pair.
+      pairAssessment:
+        left.firmwareVersion && right.firmwareVersion
+          ? {
+              matched: left.firmwareVersion === right.firmwareVersion,
+              leftVersion: left.firmwareVersion,
+              rightVersion: right.firmwareVersion,
+              note:
+                left.firmwareVersion === right.firmwareVersion
+                  ? "Both temples report the same firmware."
+                  : "The temples report different firmware versions — the usual remnant of an interrupted cross-version update. Both applications are responsive; converge the off-target route to heal the pair.",
+            }
+          : null,
       recoveryAssessment: {
         mode: "running-application Apollo-main reinstall through case USB",
         requiredCaseVersion: REVIEWED_CASE_VERSION,

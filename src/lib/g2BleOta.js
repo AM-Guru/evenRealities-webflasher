@@ -61,6 +61,19 @@ export const G2_BLE_LOSS_RECONNECT_DELAY_MS = 10000;
 export const G2_BLE_REBOOT_SETTLE_MS = G2_BLE_LOSS_RECONNECT_DELAY_MS;
 export const G2_BLE_RECONNECT_INTERVAL_MS = 2500;
 export const G2_BLE_RECONNECT_ATTEMPTS = 8;
+// BEGIN (opcode 0x00) is replayed on every mid-transfer reconnect and its
+// status is not authoritative — FILE_CHECK is — so a silent BEGIN is safe to
+// resend. Without this bound one dropped acknowledgement killed a whole side
+// after a single 8-second wait, before any firmware byte had moved.
+export const G2_BLE_BEGIN_ATTEMPTS = 3;
+// A final END 8 (UPDATING) means the temple reboots into its updater and
+// writes the staged multi-megabyte image before its Application GATT server
+// returns. That apply takes on the order of minutes; the mid-transfer blip
+// budget (10 s + 8 × 2.5 s ≈ 27 s) exhausted before the temple could possibly
+// answer, so every fully verified transfer was reported as unproven. Size the
+// post-update window at ~130 s: the 10 s settle plus 24 attempts × 5 s.
+export const G2_BLE_POST_UPDATE_RECONNECT_INTERVAL_MS = 5000;
+export const G2_BLE_POST_UPDATE_RECONNECT_ATTEMPTS = 24;
 export const G2_BLE_VISIBILITY_RESUME_SETTLE_MS = 250;
 export const G2_BLE_TARGET_PROOF_MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -956,6 +969,9 @@ export class G2BleOtaSession {
       lossReconnectDelayMs = G2_BLE_LOSS_RECONNECT_DELAY_MS,
       reconnectIntervalMs = G2_BLE_RECONNECT_INTERVAL_MS,
       reconnectAttempts = G2_BLE_RECONNECT_ATTEMPTS,
+      beginAttempts = G2_BLE_BEGIN_ATTEMPTS,
+      postUpdateReconnectIntervalMs = G2_BLE_POST_UPDATE_RECONNECT_INTERVAL_MS,
+      postUpdateReconnectAttempts = G2_BLE_POST_UPDATE_RECONNECT_ATTEMPTS,
       initialConnectAttempts = G2_BLE_RECONNECT_ATTEMPTS,
       visibilityResumeSettleMs = G2_BLE_VISIBILITY_RESUME_SETTLE_MS,
       documentObject =
@@ -976,6 +992,9 @@ export class G2BleOtaSession {
     this.lossReconnectDelayMs = lossReconnectDelayMs;
     this.reconnectIntervalMs = reconnectIntervalMs;
     this.reconnectAttempts = reconnectAttempts;
+    this.beginAttempts = beginAttempts;
+    this.postUpdateReconnectIntervalMs = postUpdateReconnectIntervalMs;
+    this.postUpdateReconnectAttempts = postUpdateReconnectAttempts;
     this.initialConnectAttempts = initialConnectAttempts;
     this.visibilityResumeSettleMs = visibilityResumeSettleMs;
     this.documentObject = documentObject;
@@ -1422,17 +1441,24 @@ export class G2BleOtaSession {
     let lastError = finalHeartbeatError;
     this.heartbeatError = null;
     this.writeTail = Promise.resolve();
-    for (let attempt = 1; attempt <= this.reconnectAttempts; attempt += 1) {
+    // END 8 (UPDATING) means the temple is now writing the staged image and
+    // stays off the air until that apply finishes, so this loop uses the long
+    // post-update budget rather than the short mid-transfer blip budget.
+    for (
+      let attempt = 1;
+      attempt <= this.postUpdateReconnectAttempts;
+      attempt += 1
+    ) {
       if (attempt > 1) {
         await new Promise((resolve) =>
-          setTimeout(resolve, this.reconnectIntervalMs),
+          setTimeout(resolve, this.postUpdateReconnectIntervalMs),
         );
       }
       try {
         this.assertSelectedDeviceIdentity();
         await this.connect();
         this.log(
-          `${this.side}: fresh post-END Bluetooth reconnect ${attempt}/${this.reconnectAttempts} verified GATT liveness on saved device ID ${this.selectedDeviceId ?? "unavailable"}${rebootObserved ? " after the observed firmware reboot and 10-second pause" : " after the completed OTA link was closed"}.`,
+          `${this.side}: fresh post-END Bluetooth reconnect ${attempt}/${this.postUpdateReconnectAttempts} verified GATT liveness on saved device ID ${this.selectedDeviceId ?? "unavailable"}${rebootObserved ? " after the observed firmware reboot and 10-second pause" : " after the completed OTA link was closed"}.`,
           "success",
         );
         return {
@@ -1444,14 +1470,23 @@ export class G2BleOtaSession {
         };
       } catch (error) {
         lastError = error;
+        // Like the sibling reconnect loops: a failed attempt may have gotten
+        // far enough to attach the notification handler, and Chrome hands
+        // back the same cached characteristic object, so without this
+        // removal each failed attempt stacks one more handler onto the
+        // eventual live link.
+        this.dataNotify?.removeEventListener?.(
+          "characteristicvaluechanged",
+          this.dataNotifyHandler,
+        );
         try {
           this.device?.gatt?.disconnect();
         } catch {
           // The failed attempt may already have closed the transient link.
         }
-        if (attempt < this.reconnectAttempts) {
+        if (attempt < this.postUpdateReconnectAttempts) {
           this.log(
-            `${this.side}: saved post-update device ID ${this.selectedDeviceId ?? "unavailable"} is not reachable yet (${error?.message ?? String(error)}) · reconnect attempt ${attempt + 1}/${this.reconnectAttempts} will follow.`,
+            `${this.side}: saved post-update device ID ${this.selectedDeviceId ?? "unavailable"} is not reachable yet (${error?.message ?? String(error)}); the temple is expected to stay unreachable while it applies the update · reconnect attempt ${attempt + 1}/${this.postUpdateReconnectAttempts} will follow.`,
             "warn",
           );
         }
@@ -1463,7 +1498,7 @@ export class G2BleOtaSession {
     // the required Case reset/version interrogation as the authoritative boot
     // check after both temples have been transferred.
     this.log(
-      `${this.side}: all final-image blocks and END ${endStatus} were verified, but the temple did not accept a fresh post-END GATT connection within ${this.reconnectAttempts} bounded attempts${lastError?.message ? ` (${lastError.message})` : ""}. No firmware will be replayed; deferring version authority to the final Case check.`,
+      `${this.side}: all final-image blocks and END ${endStatus} were verified, but the temple did not accept a fresh post-END GATT connection within ${this.postUpdateReconnectAttempts} bounded attempts across the ${Math.round((this.rebootSettleMs + (this.postUpdateReconnectAttempts - 1) * this.postUpdateReconnectIntervalMs) / 1000)}-second post-update window${lastError?.message ? ` (${lastError.message})` : ""}. No firmware will be replayed; deferring version authority to the final Case check.`,
       "warn",
     );
     return {
@@ -1471,9 +1506,64 @@ export class G2BleOtaSession {
       rebootObserved,
       freshReconnectAttempted: true,
       reconnected: false,
-      reconnectAttempts: this.reconnectAttempts,
+      reconnectAttempts: this.postUpdateReconnectAttempts,
       reconnectError: lastError?.message ?? null,
     };
+  }
+
+  // Send the package BEGIN (opcode 0x00), tolerating a silent temple.
+  //
+  // Every other command in this protocol gets bounded retries — blocks 3,
+  // components 3, reconnects 8 — but BEGIN got exactly one 8-second wait, and
+  // a single dropped acknowledgement (common when both temples bring up
+  // notification subscriptions on one adapter at once) failed the whole side
+  // before any firmware byte was sent. BEGIN is safe to resend: it is already
+  // replayed on every mid-transfer reconnect, and per-component FILE_CHECK
+  // remains the authoritative gate. A timeout here therefore rebuilds the
+  // link — fresh GATT connection, fresh CCCD subscriptions — and asks again.
+  async beginPackage() {
+    let lastError = null;
+    for (let attempt = 1; attempt <= this.beginAttempts; attempt += 1) {
+      try {
+        if (attempt > 1) {
+          await this.connectForTransfer();
+          this.startHeartbeat();
+          // The rebuilt link restarts the package from scratch, so mirror
+          // flashBundle's fresh-session state: transport sequence from zero,
+          // and the rebuild counted as a connection recovery in the evidence
+          // record like every reconnectAfterLoss recovery is.
+          this.sequence = 0;
+          this.connectionRecoveries += 1;
+        }
+        return await this.sendControl(0x00);
+      } catch (error) {
+        lastError = error;
+        if (isG2BleConnectionLoss(error, this.device)) {
+          const recovery = await this.reconnectAfterLoss(
+            "the package BEGIN command",
+          );
+          return recovery.beginStatus;
+        }
+        if (error?.code !== "ACK_TIMEOUT") throw error;
+        if (attempt < this.beginAttempts) {
+          this.log(
+            `${this.side}: BEGIN (opcode 0x00) drew no acknowledgement within ${Math.round(this.controlAckTimeoutMs / 1000)} seconds while the link stayed up. BEGIN is safe to resend, so the Bluetooth link will be rebuilt with fresh notification subscriptions · BEGIN attempt ${attempt + 1}/${this.beginAttempts}.`,
+            "warn",
+          );
+          await this.disconnect();
+          this.heartbeatError = null;
+          this.writeTail = Promise.resolve();
+        }
+      }
+    }
+    throw new G2BleOtaError(
+      `${this.side}: the package BEGIN command drew no Bluetooth OTA acknowledgement after ${this.beginAttempts} bounded attempts, each on a freshly rebuilt link. The temple's OTA service accepted the connection but is not answering; no firmware bytes were sent.`,
+      {
+        code: "BEGIN_FAILED",
+        attempts: this.beginAttempts,
+        cause: lastError,
+      },
+    );
   }
 
   async flashComponent(component, componentIndex, totals) {
@@ -1627,16 +1717,7 @@ export class G2BleOtaSession {
     try {
       await this.connectForTransfer();
       this.startHeartbeat();
-      let beginStatus;
-      try {
-        beginStatus = await this.sendControl(0x00);
-      } catch (error) {
-        if (!isG2BleConnectionLoss(error, this.device)) throw error;
-        const recovery = await this.reconnectAfterLoss(
-          "the package BEGIN command",
-        );
-        beginStatus = recovery.beginStatus;
-      }
+      const beginStatus = await this.beginPackage();
       if (!END_OK.has(beginStatus)) {
         this.log(
           `${this.side}: BEGIN returned ${beginStatus} (${g2BleStatusName(beginStatus)}); continuing because FILE_CHECK remains the authoritative per-component gate.`,

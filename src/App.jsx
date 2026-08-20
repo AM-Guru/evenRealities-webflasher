@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   POGO_TRANSFER_RESEARCH,
   formatBytes,
@@ -18,7 +18,7 @@ import {
 } from "./lib/serial.js";
 import {
   buildG2SystemBackupArtifact,
-  findMatchingGlassesRecoveryRelease,
+  resolveGlassesRecoveryReleases,
   validateGlassesRecoveryBundle,
 } from "./lib/backup.js";
 import { buildG2DeviceAnalytics } from "./lib/analytics.js";
@@ -1962,6 +1962,7 @@ function App() {
                 at: new Date().toISOString(),
                 operation: request,
                 message: error.message,
+                caseTransport: Boolean(error.caseTransportFailure),
               },
             },
           };
@@ -2150,43 +2151,64 @@ function App() {
       }
 
       const session = getSession();
-      const result = await session.backup({
-        progressBase: 0,
-        progressSpan: 0.62,
-      });
+      // Cheap preconditions first: each temple probe costs seconds, while the
+      // 512 KiB case flash read costs many minutes on a slow link. Probing
+      // and resolving the recovery bundles before the long read turns an
+      // unsatisfiable combination into a fast failure instead of a long one
+      // whose result is then discarded.
       const templeProbes = {};
       for (const [index, route] of ["left", "right"].entries()) {
         templeProbes[route] = await session.probeRunningTemple(
           "version",
           route,
           {
-            progressBase: 0.62 + index * 0.14,
+            progressBase: index * 0.14,
             progressSpan: 0.14,
           },
         );
       }
-      const recoveryRelease = findMatchingGlassesRecoveryRelease(
+      const recoveryResolution = resolveGlassesRecoveryReleases(
         catalog,
         templeProbes,
       );
-      setSessionProgress(0.91, "Loading matching Smart Glasses recovery firmware");
-      const response = await fetchCatalogRelease(
-        recoveryRelease,
-        "Smart Glasses recovery archive",
-      );
-      const recoveryBundleBytes = new Uint8Array(await response.arrayBuffer());
-      await validateGlassesRecoveryBundle(
-        recoveryBundleBytes,
-        recoveryRelease,
-      );
+      if (!recoveryResolution.pairMatched) {
+        addLog(
+          `The seated temples report different firmware versions (left ${recoveryResolution.left.version}, right ${recoveryResolution.right.version}) — an interrupted cross-version update leaves exactly this state. Backing up both live snapshots with per-route official recovery bundles; Automatic Apply can then converge the pair.`,
+          "warn",
+        );
+      }
+      for (const side of ["left", "right"]) {
+        const omission = recoveryResolution[side].omissionReason;
+        if (omission) {
+          addLog(
+            `${side}: ${omission} The live snapshot is still captured; the bundle is recorded as an explicit omission.`,
+            "warn",
+          );
+        }
+      }
+      setSessionProgress(0.3, "Loading matching Smart Glasses recovery firmware");
+      const recoveryBundles = [];
+      for (const release of recoveryResolution.releases) {
+        const response = await fetchCatalogRelease(
+          release,
+          "Smart Glasses recovery archive",
+        );
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        await validateGlassesRecoveryBundle(bytes, release);
+        recoveryBundles.push({ release, bytes });
+      }
+      const result = await session.backup({
+        progressBase: 0.36,
+        progressSpan: 0.6,
+      });
       setSessionProgress(0.97, "Packaging combined recovery backup");
 
       const artifact = buildG2SystemBackupArtifact({
         caseBackup: result,
         report,
         templeProbes,
-        recoveryRelease,
-        recoveryBundleBytes,
+        recoveryResolution,
+        recoveryBundles,
       });
       const nameVersion =
         artifact.chargingCase.firmwareVersion ?? "unknown";
@@ -2200,7 +2222,7 @@ function App() {
         ...result,
         artifact,
         templeProbes,
-        recoveryRelease,
+        recoveryResolution,
       });
       setPogoResults((current) => ({
         ...current,
@@ -2221,7 +2243,7 @@ function App() {
       }));
       setSessionProgress(1, "Case + Smart Glasses backup verified");
       addLog(
-        `Combined backup downloaded · full Case + both G2 ${recoveryRelease.version} temple snapshots + validated official recovery bundle.`,
+        `Combined backup downloaded · full Case + temple snapshots (left ${recoveryResolution.left.version}, right ${recoveryResolution.right.version}) + ${artifact.smartGlasses.recoveryBundles.length} validated official recovery bundle${artifact.smartGlasses.recoveryBundles.length === 1 ? "" : "s"}.`,
         "success",
       );
     });
@@ -2558,6 +2580,14 @@ function App() {
                 setRouteProgress(side, fraction, detail, status),
             }),
           }));
+          // Session errors already begin with their own "left:"/"right:"
+          // prefix; strip it before re-prefixing so a failure never reads as
+          // "left: left: …" in the log or the summary.
+          const sideFailureDetail = (side, reason) =>
+            String(reason?.message || reason).replace(
+              new RegExp(`^${side}:\\s*`),
+              "",
+            );
           const routeOutcomes = await flashG2BleSessionsConcurrently(
             sessionEntries,
             prepared,
@@ -2585,16 +2615,29 @@ function App() {
                   );
                   return;
                 }
+                // Surface the failure the moment this side settles. Without
+                // this, a side that died seconds in stayed a silent 0% while
+                // the other side transferred for minutes, and the operator
+                // learned why only from the end-of-session summary.
+                const detail = sideFailureDetail(side, reason);
+                addLog(
+                  `${side}: Bluetooth OTA session failed · ${detail}${
+                    routesToFlash.length === 2
+                      ? " The other side continues independently to its own verdict."
+                      : ""
+                  }`,
+                  "error",
+                );
                 setRouteProgress(
                   side,
                   routeProgress[side],
-                  `${side}: ${reason?.message || String(reason)}`,
+                  `${side}: ${detail}`,
                   "failed",
                 );
               },
             },
           );
-          for (const outcome of routeOutcomes) {
+          const recordRouteOutcome = (outcome) => {
             const { side, device } = outcome;
             if (outcome.status === "fulfilled") {
               const postUpdate = outcome.value?.components?.at(-1)?.postUpdate;
@@ -2620,7 +2663,7 @@ function App() {
                   "verified",
                 );
               }
-              continue;
+              return;
             }
             const failure = outcome.reason;
             completedRoutes[side] = failure?.partialResult
@@ -2645,6 +2688,134 @@ function App() {
                     code: failure?.code ?? null,
                   },
                 };
+          };
+          // Attached once here rather than inside each branch above, so a
+          // future record shape cannot silently lose the retry provenance.
+          const recordRouteOutcomeWithProvenance = (outcome) => {
+            recordRouteOutcome(outcome);
+            if (outcome.soloRetry) {
+              completedRoutes[outcome.side].soloRetry = true;
+            }
+          };
+          const effectiveOutcomes = [...routeOutcomes];
+          for (const outcome of effectiveOutcomes) {
+            recordRouteOutcome(outcome);
+          }
+          // The library's bounded loops wrap the terminal error, so an
+          // identity refusal raised inside connect() surfaces as
+          // INITIAL_CONNECT_FAILED / RECONNECT_FAILED / COMPONENT_FAILED with
+          // the refusal only on the cause chain. Checking the top-level code
+          // alone silently retried a temple whose endpoint identity changed.
+          const identityRefusalCode = (reason) => {
+            const seen = new Set();
+            let current = reason;
+            while (current && typeof current === "object" && !seen.has(current)) {
+              seen.add(current);
+              if (
+                current.code === "DEVICE_ID_CHANGED" ||
+                current.code === "DEVICE_SIDE_CHANGED"
+              ) {
+                return current.code;
+              }
+              current = current.cause;
+            }
+            return null;
+          };
+
+          // One bounded solo retry per failed side, sequentially, after every
+          // simultaneous session has settled. The dual-session run shares one
+          // Bluetooth adapter, and its most common failure — a dropped first
+          // acknowledgement while both temples bring up subscriptions — is
+          // exactly the kind that succeeds once the radio is otherwise idle.
+          // Identity refusals are never retried: a device that changed ID or
+          // side mid-recovery must reach the operator, not a retry loop.
+          for (const [index, outcome] of effectiveOutcomes.entries()) {
+            if (outcome.status !== "rejected") continue;
+            const { side, device } = outcome;
+            const identityRefusal = identityRefusalCode(outcome.reason);
+            if (identityRefusal) {
+              addLog(
+                `${side}: the failure carries an endpoint-identity refusal (${identityRefusal}), which is deliberately never retried automatically. Verify the physical temples before any further attempt.`,
+                "warn",
+              );
+              continue;
+            }
+            addLog(
+              `${side}: starting one bounded solo Bluetooth retry${
+                routeOutcomes.length === 2
+                  ? " now that the simultaneous sessions have settled and the radio is otherwise idle"
+                  : ""
+              }. The same selected endpoint is reused; the chooser will not reopen.`,
+              "info",
+            );
+            setRouteProgress(
+              side,
+              routeProgress[side],
+              `${side}: bounded solo retry connecting`,
+              "connecting",
+            );
+            const retrySession = new G2BleOtaSession(device, {
+              side,
+              log: addLog,
+              progress: (fraction, detail, status) =>
+                setRouteProgress(side, fraction, detail, status),
+            });
+            try {
+              let value;
+              try {
+                value = await retrySession.flashBundle(prepared);
+              } finally {
+                await retrySession.disconnect();
+              }
+              effectiveOutcomes[index] = {
+                side,
+                device,
+                status: "fulfilled",
+                value,
+                soloRetry: true,
+              };
+              addLog(
+                `${side}: the bounded solo Bluetooth retry verified the complete package after the simultaneous attempt failed.`,
+                "success",
+              );
+            } catch (retryError) {
+              effectiveOutcomes[index] = {
+                side,
+                device,
+                status: "rejected",
+                reason: retryError,
+                soloRetry: true,
+              };
+              addLog(
+                `${side}: the bounded solo Bluetooth retry also failed · ${sideFailureDetail(side, retryError)}`,
+                "error",
+              );
+              // A retry that died earlier than the first attempt must not
+              // erase the first attempt's transfer evidence: the audit and
+              // the later Case-side arbitration need to know how much of the
+              // image this temple actually accepted.
+              const priorEvidence = completedRoutes[side];
+              const retryEvidence = retryError?.partialResult ?? null;
+              if (
+                (priorEvidence?.verifiedPayloadBytes ?? 0) >
+                (retryEvidence?.verifiedPayloadBytes ?? 0)
+              ) {
+                completedRoutes[side] = {
+                  ...priorEvidence,
+                  soloRetry: true,
+                  soloRetryFailure: {
+                    message: retryError?.message || String(retryError),
+                    code: retryError?.code ?? null,
+                  },
+                };
+                addLog(
+                  `${side}: retaining the first attempt's transfer evidence (${priorEvidence.verifiedPayloadBytes.toLocaleString("en-US")} verified bytes) over the retry's earlier failure in the preserved audit.`,
+                  "warn",
+                );
+                continue;
+              }
+            }
+            recordRouteOutcomeWithProvenance(effectiveOutcomes[index]);
           }
           setBleResults({
             imageSha256: prepared.fileSha256,
@@ -2654,14 +2825,14 @@ function App() {
             outcome: "in_progress",
           });
 
-          const failedOutcomes = routeOutcomes.filter(
+          const failedOutcomes = effectiveOutcomes.filter(
             ({ status }) => status === "rejected",
           );
           if (failedOutcomes.length) {
             const failureSummary = failedOutcomes
               .map(
-                ({ side, reason }) =>
-                  `${side}: ${reason?.message || String(reason)}`,
+                ({ side, reason, soloRetry }) =>
+                  `${side}${soloRetry ? " (including one bounded solo retry)" : ""}: ${sideFailureDetail(side, reason)}`,
               )
               .join("; ");
             const sessionSummary =
@@ -2990,6 +3161,7 @@ function App() {
             lastProbeFailure: {
               at: new Date().toLocaleTimeString(),
               message: error.message,
+              caseTransport: Boolean(error.caseTransportFailure),
             },
           },
         }));
@@ -5065,8 +5237,17 @@ function App() {
                 <div className="backup-digest">
                   <span>CASE FLASH SHA-256</span>
                   <code>{backup.flashSha256}</code>
-                  <span>SMART GLASSES BUNDLE SHA-256</span>
-                  <code>{backup.recoveryRelease.sha256}</code>
+                  {(backup.artifact?.smartGlasses?.recoveryBundles ?? []).map(
+                    (bundle) => (
+                      <Fragment key={bundle.sha256}>
+                        <span>
+                          {bundle.coveredSides.join(" + ").toUpperCase()} {bundle.version}{" "}
+                          BUNDLE SHA-256
+                        </span>
+                        <code>{bundle.sha256}</code>
+                      </Fragment>
+                    ),
+                  )}
                 </div>
               ) : null}
             </div>

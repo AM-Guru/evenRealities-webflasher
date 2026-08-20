@@ -200,6 +200,36 @@ test("configures STM32 ROM framing and inverts DTR/RTS control bits", async () =
   await port.close();
 });
 
+test("a vanished USB device errors the stream instead of stalling silently", async () => {
+  const device = makeMockDevice();
+  device.transferIn = async () => {
+    device.opened = false;
+    throw new DOMException("The device was disconnected.", "NetworkError");
+  };
+  const port = new G2CaseWebUsbPort(device);
+  await port.open({
+    baudRate: 1_000_000,
+    dataBits: 8,
+    stopBits: 1,
+    parity: "none",
+    flowControl: "none",
+    bufferSize: 64,
+  });
+
+  const reader = port.readable.getReader();
+  // The wrapped error must not be a NetworkError: the serial pump discards
+  // NetworkError/AbortError as teardown noise, and the whole point is that a
+  // surprise disconnect is recorded, not silently absorbed.
+  await assert.rejects(reader.read(), (error) => {
+    assert.notEqual(error?.name, "NetworkError");
+    assert.match(error.message, /no longer open/);
+    assert.match(error.message, /disconnected or reset outside a deliberate close/);
+    assert.equal(error.cause?.name, "NetworkError");
+    return true;
+  });
+  reader.releaseLock();
+});
+
 test("streams bulk input and cancels a pending WebUSB read cleanly", async () => {
   const device = makeMockDevice({ reads: [[0xde, 0xa0, 0x0a]] });
   const port = new G2CaseWebUsbPort(device);

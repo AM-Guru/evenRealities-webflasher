@@ -53,6 +53,17 @@ export function classifyAutomaticTempleBootState({
       detail: `Checksum-valid Application-mode version reply ${identity.firmwareVersion}/hardware ${identity.hardwareRevision}.`,
     };
   }
+  if (error?.caseTransportFailure) {
+    // The Case-side ROM/serial transport failed before the bridge could
+    // query the temple, so nothing was learned about the temple itself.
+    return {
+      state: "case-transport-failure",
+      applicationResponsive: null,
+      firmwareVersion: null,
+      hardwareRevision: null,
+      detail: `The Case-side ROM/serial transport failed before the temple could be queried: ${error.message ?? String(error)}`,
+    };
+  }
   return {
     // The reviewed Case bridge can prove a running application, but it cannot
     // interrogate Apollo's ROM/secondary bootloader. Keep the uncertain half
@@ -84,6 +95,15 @@ export function minimumAutomaticRecoveryPlan(temples) {
       firmwareWriteRequired: false,
       reason:
         "Both temples must be seated before the bilateral reboot can be issued and verified.",
+    };
+  }
+  if (routes.some((temple) => temple?.state === "case-transport-failure")) {
+    return {
+      action: "retry-analysis",
+      executable: false,
+      firmwareWriteRequired: false,
+      reason:
+        "The Case-side ROM/serial transport failed before at least one temple could be queried; no temple evidence exists. Analyze again before choosing any recovery step.",
     };
   }
   if (routes.every((temple) => temple?.state === "application")) {

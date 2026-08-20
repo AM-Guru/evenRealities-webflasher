@@ -37,6 +37,15 @@ function pinnedR1Release({
 
 export const R1_PINNED_RELEASES = Object.freeze([
   pinnedR1Release({
+    version: "2.2.9.0003",
+    size: 655347,
+    md5: "eac75275743ed88ed52704cf5079d4d5",
+    sha256: "38089992808e39ad933d584d2962dc3dc9d9f51ae0dd3b30d17c8a8cf8d14de8",
+    binSize: 654716,
+    binSha256: "f4b5a915c160201ac15ee78aabdcfb7ba86a7f12916c9418e70fe70982c594ae",
+    datSha256: "f644591d8140ada88fc1e74dee5bb8c6d2fe7b2151bf8613f52f79dd6f663f42",
+  }),
+  pinnedR1Release({
     version: "2.2.8.0002",
     size: 650915,
     md5: "ce5aa289bf6c95a293d41bd48c123e40",
@@ -151,6 +160,20 @@ const OBJECT_DATA = 0x02;
 const PACKET_BYTES = 20;
 export const R1_DFU_PACKET_RECEIPT_INTERVAL = 12;
 const PACKET_RECEIPT_TIMEOUT_MS = 10000;
+// Nordic's reference transports retransmit a data object whose checksum
+// disagrees, rather than abandoning the update: CREATE resets that object's
+// write pointer, so a rewrite is bounded and byte-exact. Without this, one
+// corrupted radio window aborted the whole R1 flash with a manual
+// "re-enter DFU mode" instruction for something the protocol can repair.
+export const R1_DFU_OBJECT_ATTEMPTS = 3;
+// Nordic's updater gives SDK 15/16 bootloaders time to prepare the first
+// data object; without this pause initial packets can be discarded.
+const FIRST_DATA_OBJECT_SETTLE_MS = 400;
+// Before an object rewrite, let any in-flight packet-receipt notification
+// from the aborted attempt land while neither a response nor a receipt is
+// pending — handleNotification drops unmatched notifications — so a stale
+// receipt cannot be paired with the retry's CREATE and abort the repair.
+const OBJECT_RETRY_SETTLE_MS = 150;
 
 function asBytes(value) {
   return value instanceof Uint8Array ? value : new Uint8Array(value);
@@ -176,13 +199,26 @@ function concatBytes(...parts) {
   return result;
 }
 
+// Table-driven, byte-identical to the bit-by-bit form (the wire-contract
+// test pins the vectors). The transfer loop hashes every growing prefix of
+// the application synchronously between radio writes, so the ~8× per-byte
+// saving is paid back on every object boundary.
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
+    }
+    table[index] = value;
+  }
+  return table;
+})();
+
 export function crc32(bytes) {
   let crc = 0xffffffff;
   for (const byte of asBytes(bytes)) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-    }
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff];
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
@@ -338,6 +374,8 @@ export class R1SecureDfuSession {
       onProgress = () => {},
       packetReceiptInterval = R1_DFU_PACKET_RECEIPT_INTERVAL,
       packetReceiptTimeoutMs = PACKET_RECEIPT_TIMEOUT_MS,
+      firstObjectSettleMs = FIRST_DATA_OBJECT_SETTLE_MS,
+      objectRetrySettleMs = OBJECT_RETRY_SETTLE_MS,
     } = {},
   ) {
     if (
@@ -355,6 +393,8 @@ export class R1SecureDfuSession {
     this.configuredPacketReceiptInterval = packetReceiptInterval;
     this.activePacketReceiptInterval = 0;
     this.packetReceiptTimeoutMs = packetReceiptTimeoutMs;
+    this.firstObjectSettleMs = firstObjectSettleMs;
+    this.objectRetrySettleMs = objectRetrySettleMs;
     this.control = null;
     this.packet = null;
     this.pendingResponse = null;
@@ -497,9 +537,13 @@ export class R1SecureDfuSession {
       const detail = actualOffset === expectedOffset
         ? `checksum mismatch at byte ${actualOffset}`
         : `byte ${actualOffset} (expected ${expectedOffset})`;
-      throw new Error(
+      const error = new Error(
         `R1 DFU ${label} failed at ${detail}. Re-enter DFU mode and retry.`,
       );
+      // Lets the data-object loop distinguish a repairable transfer checksum
+      // disagreement from protocol or link errors it must not retry blindly.
+      error.code = "R1_DFU_CRC_MISMATCH";
+      throw error;
     }
   }
 
@@ -633,18 +677,47 @@ export class R1SecureDfuSession {
 
     while (offset < application.length) {
       const end = Math.min(offset + selected.maximumSize, application.length);
-      await this.createObject(OBJECT_DATA, end - offset);
-      if (offset === 0) {
-        // Nordic's updater gives SDK 15/16 bootloaders time to prepare the first
-        // data object; without this pause initial packets can be discarded.
-        await new Promise((resolve) => setTimeout(resolve, 400));
+      for (
+        let attempt = 1;
+        attempt <= R1_DFU_OBJECT_ATTEMPTS;
+        attempt += 1
+      ) {
+        await this.createObject(OBJECT_DATA, end - offset);
+        if (offset === 0 && this.firstObjectSettleMs > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, this.firstObjectSettleMs),
+          );
+        }
+        try {
+          await this.writePackets(application.subarray(offset, end), {
+            baseOffset: offset,
+            checksumSource: application,
+          });
+          await this.verifyOffset(end, crc32(application.subarray(0, end)));
+          break;
+        } catch (error) {
+          if (
+            error?.code !== "R1_DFU_CRC_MISMATCH"
+            || attempt === R1_DFU_OBJECT_ATTEMPTS
+          ) {
+            throw error;
+          }
+          // CREATE on the next pass resets this object's write pointer, so the
+          // rewrite replays exactly these bytes and nothing earlier. The pause
+          // drains any in-flight receipt notification from the aborted attempt
+          // while nothing is pending, so it cannot poison the retry's CREATE.
+          if (this.objectRetrySettleMs > 0) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, this.objectRetrySettleMs),
+            );
+          }
+          this.onProgress(
+            offset / application.length,
+            `Object checksum disagreed; rewriting bytes ${offset.toLocaleString()}–${end.toLocaleString()} · attempt ${attempt + 1}/${R1_DFU_OBJECT_ATTEMPTS}`,
+          );
+        }
       }
-      await this.writePackets(application.subarray(offset, end), {
-        baseOffset: offset,
-        checksumSource: application,
-      });
       offset = end;
-      await this.verifyOffset(offset, crc32(application.subarray(0, offset)));
       await this.command(new Uint8Array([OP_EXECUTE]), OP_EXECUTE);
       this.onProgress(
         offset / application.length,

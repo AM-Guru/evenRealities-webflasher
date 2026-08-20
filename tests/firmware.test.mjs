@@ -818,32 +818,32 @@ test("ships the complete official-only catalog", async () => {
   assert.equal(
     catalog.releases.filter((release) => (release.channel ?? "official") === "official")
       .length,
-    14,
+    15,
   );
   const latestOfficial = catalog.releases.find(
-    (release) => release.id === "g2-official-2.2.8.4",
+    (release) => release.id === "g2-official-2.2.9.22",
   );
-  assert.equal(latestOfficial.sha256, OFFICIAL_G2_SHA256["2.2.8.4"]);
+  assert.equal(latestOfficial.sha256, OFFICIAL_G2_SHA256["2.2.9.22"]);
   assert.equal(latestOfficial.caseVersion, "1.2.57");
   const custom = catalog.releases.filter((release) => release.channel === "custom");
   assert.equal(custom.length, 0);
 });
 
-test("ships the exact official G2 2.2.8.4 bundle and six components", async () => {
+test("ships the exact official G2 2.2.9.22 bundle and six components", async () => {
   const releaseDirectory = new URL(
-    "../public/firmware-updates/g2/2.2.8.4/",
+    "../public/firmware-updates/g2/2.2.9.22/",
     import.meta.url,
   );
   const firmware = await parseFirmwareInput(
-    await readFile(new URL("d495a1dffb919795e95135e144345f04.bin", releaseDirectory)),
-    "d495a1dffb919795e95135e144345f04.bin",
+    await readFile(new URL("fc250b05e98a9ff998b4b68f5f99f994.bin", releaseDirectory)),
+    "fc250b05e98a9ff998b4b68f5f99f994.bin",
   );
-  assert.equal(firmware.fileSha256, OFFICIAL_G2_SHA256["2.2.8.4"]);
-  assert.equal(firmware.g2Version, "2.2.8.4");
+  assert.equal(firmware.fileSha256, OFFICIAL_G2_SHA256["2.2.9.22"]);
+  assert.equal(firmware.g2Version, "2.2.9.22");
   assert.equal(firmware.componentImages.length, 6);
   assert.equal(firmware.caseVersion, "1.2.57");
   assert.equal(firmware.templeFlashTarget.hardwareValidated, false);
-  assert.equal(firmware.templeFlashTarget.reportedVersion, "2.2.8.4");
+  assert.equal(firmware.templeFlashTarget.reportedVersion, "2.2.9.22");
 });
 
 test("ships the exact official G2 2.2.7.14 bundle and six components", async () => {

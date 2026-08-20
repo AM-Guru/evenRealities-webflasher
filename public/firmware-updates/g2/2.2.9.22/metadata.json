@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 2,
+  "device": "Even Realities G2",
+  "version": "2.2.9.22",
+  "internalVersion": "2.2.9.22",
+  "reportedVersion": "2.2.9.22",
+  "channel": "official",
+  "trust": "official-pinned",
+  "hardwareValidated": false,
+  "baseVersion": null,
+  "notes": "Changed the Menu gesture to tap then long press; allows more settings while features run, lets features continue with the display off, and supports ending features via Even AI.",
+  "capabilities": [],
+  "caseVersion": "1.2.57",
+  "sourceUrl": "https://cdn.evenreal.co/firmware/fc250b05e98a9ff998b4b68f5f99f994.bin",
+  "archivedFrom": "Even Realities CDN",
+  "sourceFile": "fc250b05e98a9ff998b4b68f5f99f994.bin",
+  "sourceMd5": "fc250b05e98a9ff998b4b68f5f99f994",
+  "sourceSha256": "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561",
+  "sourceSize": 4476518,
+  "patchUrl": null,
+  "patchFile": null,
+  "patchSha256": null,
+  "manifestFile": null,
+  "manifestSha256": null,
+  "archivedAt": "2026-08-20T14:34:39.825Z",
+  "mainFirmware": {
+    "runBase": "0x00438000",
+    "installedImageSize": 3697252,
+    "installedImageEnd": "0x007bea64",
+    "crc32": "a255c385"
+  },
+  "components": [
+    {
+      "name": "firmware/codec.bin",
+      "typeId": 4,
+      "size": 326092,
+      "crc32c": "bdcfeeac",
+      "sha256": "b06dfef7faa2f1e52d2aacd07958d4b96ffc36dca5077ac9149e48f19fc9c4d0"
+    },
+    {
+      "name": "firmware/ble_em9305.bin",
+      "typeId": 5,
+      "size": 211948,
+      "crc32c": "c074baf7",
+      "sha256": "91a38f7fc05555f86181ecb22b363e3239bfcaaa2ff6171e98524ae64821eca9"
+    },
+    {
+      "name": "firmware/touch.bin",
+      "typeId": 3,
+      "size": 34720,
+      "crc32c": "903ca49a",
+      "sha256": "c14456cd4d432815d79700b251c9a575f75c76a3710f4148c0df6ddba4cb7ba2"
+    },
+    {
+      "name": "firmware/box.bin",
+      "typeId": 6,
+      "size": 55784,
+      "crc32c": "7d443be0",
+      "sha256": "36ca0c13558f252af286ae2b36b5e576d087d21d37b15d778e7da9f502a70374"
+    },
+    {
+      "name": "ota/s200_bootloader.bin",
+      "typeId": 1,
+      "size": 149746,
+      "crc32c": "1b91e2b5",
+      "sha256": "0d6837c3eb3153303e408ec02bc7f67ecbe77095c4f12e80bf9b45cabd3cf11e"
+    },
+    {
+      "name": "ota/s200_firmware_ota.bin",
+      "typeId": 0,
+      "size": 3697284,
+      "crc32c": "e42e29ed",
+      "sha256": "35844c95c6ffe62baca961d396c870225cdc91372f253abaece40c3e99a1c3d2"
+    }
+  ],
+  "files": [
+    {
+      "name": "fc250b05e98a9ff998b4b68f5f99f994.bin",
+      "size": 4476518,
+      "sha256": "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561"
+    },
+    {
+      "name": "firmware_codec.bin",
+      "size": 326092,
+      "sha256": "b06dfef7faa2f1e52d2aacd07958d4b96ffc36dca5077ac9149e48f19fc9c4d0"
+    },
+    {
+      "name": "firmware_ble_em9305.bin",
+      "size": 211948,
+      "sha256": "91a38f7fc05555f86181ecb22b363e3239bfcaaa2ff6171e98524ae64821eca9"
+    },
+    {
+      "name": "firmware_touch.bin",
+      "size": 34720,
+      "sha256": "c14456cd4d432815d79700b251c9a575f75c76a3710f4148c0df6ddba4cb7ba2"
+    },
+    {
+      "name": "firmware_box.bin",
+      "size": 55784,
+      "sha256": "36ca0c13558f252af286ae2b36b5e576d087d21d37b15d778e7da9f502a70374"
+    },
+    {
+      "name": "firmware_box.raw.bin",
+      "size": 55752,
+      "sha256": "773b6d4cfdaf0a5a74a557e3babe8222a0ae813436b76a7437c1096d2c60d677"
+    },
+    {
+      "name": "ota_s200_bootloader.bin",
+      "size": 149746,
+      "sha256": "0d6837c3eb3153303e408ec02bc7f67ecbe77095c4f12e80bf9b45cabd3cf11e"
+    },
+    {
+      "name": "ota_s200_firmware_ota.bin",
+      "size": 3697284,
+      "sha256": "35844c95c6ffe62baca961d396c870225cdc91372f253abaece40c3e99a1c3d2"
+    }
+  ]
+}

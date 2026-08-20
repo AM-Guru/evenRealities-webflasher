@@ -27,6 +27,8 @@ const OFFICIAL_G2_2_2_7_14_SHA256 =
   "0fced0aebcc6c88db6f76dba34f91b805d842a5fc297bfd7fa6d6a34ec83cecb";
 const OFFICIAL_G2_2_2_8_4_SHA256 =
   "df7b8bd18727765eba73be5ab836e0ee4cfd17b5e680046003b8d608d2fbfda7";
+const OFFICIAL_G2_2_2_9_22_SHA256 =
+  "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561";
 
 // The catalog production actually served on 2026-07-28 and is older than the
 // current official releases pinned by this build.
@@ -62,6 +64,7 @@ test("flags a pinned image the served library is too old to offer", () => {
   assert.deepEqual(
     missing.map((target) => target.imageSha256),
     [
+      OFFICIAL_G2_2_2_9_22_SHA256,
       OFFICIAL_G2_2_2_8_4_SHA256,
       OFFICIAL_G2_2_2_7_14_SHA256,
     ],
@@ -81,6 +84,7 @@ test("blocks firmware mutation when the served library is behind the build", () 
       assert.deepEqual(
         error.missingPinnedImages.map((target) => target.imageSha256),
         [
+          OFFICIAL_G2_2_2_9_22_SHA256,
           OFFICIAL_G2_2_2_8_4_SHA256,
           OFFICIAL_G2_2_2_7_14_SHA256,
         ],
@@ -109,6 +113,7 @@ test("offers only official firmware and covers every compiled writer target", as
     ),
     false,
   );
+  assert.ok(catalog.some((release) => release.sha256 === OFFICIAL_G2_2_2_9_22_SHA256));
   assert.ok(catalog.some((release) => release.sha256 === OFFICIAL_G2_2_2_8_4_SHA256));
   assert.ok(catalog.some((release) => release.sha256 === OFFICIAL_G2_2_2_7_14_SHA256));
   assert.deepEqual(

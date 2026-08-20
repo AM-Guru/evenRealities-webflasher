@@ -41,6 +41,7 @@ import {
 import { sha256Hex, writeU32LE } from "../src/lib/firmware.js";
 import {
   G2CaseSession,
+  SerialTransport,
   WEB_SERIAL_ROM_READ_SIZE,
   canResetAfterZeroWriteSetupStop,
   canRestartFailedTempleComponent,
@@ -67,6 +68,12 @@ import {
   readYhmRouteProfileMemory,
   resolveTempleDataPacingStartLevel,
   templeDataPacingMultiplierForRestart,
+  POGO_COMPONENT_RESTART_LIMIT,
+  POGO_HOST_TIMEOUT_COMPONENT_RESTART_LIMIT,
+  POGO_DATA_INPLACE_RESEND_LIMIT,
+  POGO_DATA_INPLACE_RECOVERY_BUDGET,
+  POGO_DATA_INPLACE_SETTLE_MS,
+  classifyInPlaceDataRecovery,
   readPogoFlashResponseFrame,
   readPogoFlashResponseHeader,
   readRomBlockWithBoundaryRecovery,
@@ -489,11 +496,27 @@ test("pacing start level honors escalated restarts and the automatic floor", () 
   );
 });
 
-test("the third whole-component attempt starts at maximum pacing", () => {
+test("the final whole-component attempt starts at maximum pacing", () => {
+  // The escalation is defined against the restart budget, not a fixed attempt
+  // number: first attempt at the remembered level, every intermediate restart
+  // at tier 2, and the restart that exhausts the budget at maximum pacing.
+  assert.ok(POGO_COMPONENT_RESTART_LIMIT >= 2);
   assert.equal(templeDataPacingMultiplierForRestart(0), 1);
-  assert.equal(templeDataPacingMultiplierForRestart(1), 2);
-  assert.equal(templeDataPacingMultiplierForRestart(2), 3);
-  assert.equal(templeDataPacingMultiplierForRestart(3), 3);
+  for (
+    let restartCount = 1;
+    restartCount < POGO_COMPONENT_RESTART_LIMIT;
+    restartCount += 1
+  ) {
+    assert.equal(templeDataPacingMultiplierForRestart(restartCount), 2);
+  }
+  assert.equal(
+    templeDataPacingMultiplierForRestart(POGO_COMPONENT_RESTART_LIMIT),
+    3,
+  );
+  assert.equal(
+    templeDataPacingMultiplierForRestart(POGO_COMPONENT_RESTART_LIMIT + 1),
+    3,
+  );
   assert.throws(
     () => templeDataPacingMultiplierForRestart(-1),
     /nonnegative integer/,
@@ -2142,16 +2165,24 @@ test("allows one fresh component restart only after a DATA failure and exact cle
       templeUartErrors: 0,
     },
   };
+  // Boundaries are asserted against the budgets themselves, so raising a
+  // budget for a marginal link cannot silently pass a stale expectation.
   assert.equal(
     canRestartFailedTempleComponent(verifiedDataFailure, 0),
     true,
   );
   assert.equal(
-    canRestartFailedTempleComponent(verifiedDataFailure, 1),
+    canRestartFailedTempleComponent(
+      verifiedDataFailure,
+      POGO_COMPONENT_RESTART_LIMIT - 1,
+    ),
     true,
   );
   assert.equal(
-    canRestartFailedTempleComponent(verifiedDataFailure, 2),
+    canRestartFailedTempleComponent(
+      verifiedDataFailure,
+      POGO_COMPONENT_RESTART_LIMIT,
+    ),
     false,
   );
   const exactHostTimeout = {
@@ -2162,14 +2193,26 @@ test("allows one fresh component restart only after a DATA failure and exact cle
       hostTimeoutRestorationVerified: true,
     },
   };
+  // A verified host-timeout restoration gets the wider budget.
+  assert.ok(
+    POGO_HOST_TIMEOUT_COMPONENT_RESTART_LIMIT > POGO_COMPONENT_RESTART_LIMIT,
+  );
   assert.equal(
-    canRestartFailedTempleComponent(exactHostTimeout, 2),
+    canRestartFailedTempleComponent(
+      exactHostTimeout,
+      POGO_HOST_TIMEOUT_COMPONENT_RESTART_LIMIT - 1,
+    ),
     true,
   );
   assert.equal(
-    canRestartFailedTempleComponent(exactHostTimeout, 3),
+    canRestartFailedTempleComponent(
+      exactHostTimeout,
+      POGO_HOST_TIMEOUT_COMPONENT_RESTART_LIMIT,
+    ),
     false,
   );
+  // Without a verified host-timeout restoration the wider budget must not
+  // apply: at the plain budget boundary this is already exhausted.
   assert.equal(
     canRestartFailedTempleComponent(
       {
@@ -2179,7 +2222,7 @@ test("allows one fresh component restart only after a DATA failure and exact cle
           hostTimeoutRestorationVerified: false,
         },
       },
-      2,
+      POGO_COMPONENT_RESTART_LIMIT,
     ),
     false,
   );
@@ -2526,6 +2569,117 @@ test("a transport failure mid-DATA does not slow the remembered pacing level", a
   );
 });
 
+test("a silent DATA record is resent in place instead of ending the attempt", () => {
+  // The audited failure signature: the full record left the host
+  // (hostChunkOffset 1009), zero UART errors on both sides, and acceptedSize
+  // frozen at expectedSequence × 1000 — a route-silent window swallowed the
+  // record. That is transient evidence, so the record is resent in place with
+  // an escalating settle, bounded per record and per attempt.
+  const silent = new RetryablePogoFlashError(
+    "No complete temple response arrived through the Case bridge.",
+  );
+  assert.deepEqual(
+    classifyInPlaceDataRecovery(silent, {
+      resendsForRecord: 0,
+      recoveriesThisAttempt: 0,
+    }),
+    { action: "resend", settleMs: POGO_DATA_INPLACE_SETTLE_MS[0] },
+  );
+  // The settle escalates and saturates at the last rung.
+  assert.deepEqual(
+    classifyInPlaceDataRecovery(silent, {
+      resendsForRecord: POGO_DATA_INPLACE_SETTLE_MS.length + 1 <
+        POGO_DATA_INPLACE_RESEND_LIMIT
+        ? POGO_DATA_INPLACE_SETTLE_MS.length + 1
+        : POGO_DATA_INPLACE_RESEND_LIMIT - 1,
+      recoveriesThisAttempt: 1,
+    }).settleMs,
+    POGO_DATA_INPLACE_SETTLE_MS[
+      Math.min(
+        POGO_DATA_INPLACE_RESEND_LIMIT - 1,
+        POGO_DATA_INPLACE_SETTLE_MS.length - 1,
+      )
+    ],
+  );
+  // Per-record and per-attempt budgets both end the attempt, which falls to
+  // the whole-component restart path exactly as before.
+  assert.deepEqual(
+    classifyInPlaceDataRecovery(silent, {
+      resendsForRecord: POGO_DATA_INPLACE_RESEND_LIMIT,
+      recoveriesThisAttempt: POGO_DATA_INPLACE_RESEND_LIMIT,
+    }),
+    { action: "abort" },
+  );
+  assert.deepEqual(
+    classifyInPlaceDataRecovery(silent, {
+      resendsForRecord: 0,
+      recoveriesThisAttempt: POGO_DATA_INPLACE_RECOVERY_BUDGET,
+    }),
+    { action: "abort" },
+  );
+  assert.throws(
+    () =>
+      classifyInPlaceDataRecovery(silent, {
+        resendsForRecord: -1,
+        recoveriesThisAttempt: 0,
+      }),
+    /nonnegative/,
+  );
+});
+
+test("a status-1 rejection of a resend advances past the lost-ACK record", () => {
+  const duplicateRejected = new TempleRejectedError(
+    "The temple rejected 0x54 with status 1.",
+    { command: 0x54, status: 1 },
+  );
+  // On a resend, status 1 is the temple's own sequence guard refusing a
+  // duplicate of a record it already committed: advance. A genuine
+  // desynchronization is self-correcting — the next record is rejected with
+  // a zero resend count and aborts below.
+  assert.deepEqual(
+    classifyInPlaceDataRecovery(duplicateRejected, {
+      resendsForRecord: 1,
+      recoveriesThisAttempt: 1,
+    }),
+    { action: "advance" },
+  );
+  // A first-transmission rejection is real temple evidence: abort, so the
+  // existing pacing commitment and dataRejection bookkeeping run.
+  assert.deepEqual(
+    classifyInPlaceDataRecovery(duplicateRejected, {
+      resendsForRecord: 0,
+      recoveriesThisAttempt: 0,
+    }),
+    { action: "abort" },
+  );
+  // Any non-sequence rejection of a resend is also real evidence.
+  const otherRejected = new TempleRejectedError(
+    "The temple rejected 0x54 with status 2.",
+    { command: 0x54, status: 2 },
+  );
+  assert.deepEqual(
+    classifyInPlaceDataRecovery(otherRejected, {
+      resendsForRecord: 2,
+      recoveriesThisAttempt: 2,
+    }),
+    { action: "abort" },
+  );
+  // The source must consult the recovery classifier before the pacing guard,
+  // and the guard before the pacing memory commit, so a transient can never
+  // escalate the remembered level on its way to a resend.
+  return readFile(new URL("../src/lib/serial.js", import.meta.url), "utf8").then(
+    (source) => {
+      const classify = source.indexOf("classifyInPlaceDataRecovery(error, {");
+      const guard = source.indexOf(
+        "if (!isExplicitTempleDataRejection(error)) throw error;",
+      );
+      const commit = source.indexOf('pacing.commitMemory("failed")');
+      assert.ok(classify !== -1 && guard !== -1 && commit !== -1);
+      assert.ok(classify < guard && guard < commit);
+    },
+  );
+});
+
 test("the flash transport reports whether records are batched over a relay", () => {
   assert.deepEqual(describeRemoteTransactOffload({ transportKind: "webusb" }), {
     offloaded: false,
@@ -2839,4 +2993,54 @@ test("the throttle probe reports only a hidden document", () => {
     if (original === undefined) delete globalThis.document;
     else globalThis.document = original;
   }
+});
+
+test("a buffered complete response is served before a pending pump error", async () => {
+  const transport = new SerialTransport({});
+  transport.queue = [Uint8Array.of(0x5a, 0xa5, 0xff, 0x00)];
+  transport.queuedBytes = 4;
+  transport.readError = new Error("CH340 bulk read failed with USB status stall");
+
+  // The device answered in full and THEN the link failed: the answer wins.
+  assert.deepEqual(
+    [...(await transport.readExact(4, 50, "buffered frame"))],
+    [0x5a, 0xa5, 0xff, 0x00],
+  );
+  // The error stays sticky and surfaces on the next read that needs data.
+  await assert.rejects(
+    transport.readExact(1, 50, "next frame"),
+    /USB status stall/,
+  );
+});
+
+test("draining buffered bytes preserves the sticky pump error", async () => {
+  const transport = new SerialTransport({});
+  transport.queue = [Uint8Array.of(1, 2, 3)];
+  transport.queuedBytes = 3;
+  transport.readError = new Error("USB stall");
+
+  transport.clear();
+  assert.equal(transport.queuedBytes, 0);
+  // The postflight loop drains this transport every 2 seconds; erasing the
+  // error here converted a hard transport fault into a misleading timeout.
+  await assert.rejects(transport.readExact(1, 50, "post-drain"), /USB stall/);
+});
+
+test("transient transport faults join the bounded post-reset liveness retry", () => {
+  assert.equal(
+    isRetryablePostResetLivenessFailure(
+      new Error("Failed to open serial port."),
+    ),
+    true,
+  );
+  assert.equal(
+    isRetryablePostResetLivenessFailure(
+      new Error("CH340 bulk read failed with USB status stall"),
+    ),
+    true,
+  );
+  assert.equal(
+    isRetryablePostResetLivenessFailure(new Error("CRC rejected")),
+    false,
+  );
 });

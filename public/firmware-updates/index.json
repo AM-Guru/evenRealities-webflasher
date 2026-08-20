@@ -1,8 +1,82 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-12T17:00:32.219Z",
+  "generatedAt": "2026-08-20T14:34:41.405Z",
   "source": "Even Realities CDN and release evidence included in this repository",
   "releases": [
+    {
+      "id": "g2-official-2.2.9.22",
+      "channel": "official",
+      "trust": "official-pinned",
+      "hardwareValidated": false,
+      "version": "2.2.9.22",
+      "internalVersion": "2.2.9.22",
+      "reportedVersion": "2.2.9.22",
+      "baseVersion": null,
+      "notes": "Changed the Menu gesture to tap then long press; allows more settings while features run, lets features continue with the display off, and supports ending features via Even AI.",
+      "capabilities": [],
+      "recoveryTarget": "case-and-glasses-bundle",
+      "caseRecoveryEligible": true,
+      "caseVersion": "1.2.57",
+      "url": "/firmware-updates/g2/2.2.9.22/fc250b05e98a9ff998b4b68f5f99f994.bin",
+      "sourceUrl": "https://cdn.evenreal.co/firmware/fc250b05e98a9ff998b4b68f5f99f994.bin",
+      "fileName": "fc250b05e98a9ff998b4b68f5f99f994.bin",
+      "size": 4476518,
+      "md5": "fc250b05e98a9ff998b4b68f5f99f994",
+      "sha256": "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561",
+      "patchUrl": null,
+      "patchSha256": null,
+      "archivedFrom": "Even Realities CDN",
+      "mainFirmware": {
+        "runBase": "0x00438000",
+        "installedImageSize": 3697252,
+        "installedImageEnd": "0x007bea64",
+        "crc32": "a255c385"
+      },
+      "components": [
+        {
+          "name": "firmware/codec.bin",
+          "typeId": 4,
+          "size": 326092,
+          "crc32c": "bdcfeeac",
+          "sha256": "b06dfef7faa2f1e52d2aacd07958d4b96ffc36dca5077ac9149e48f19fc9c4d0"
+        },
+        {
+          "name": "firmware/ble_em9305.bin",
+          "typeId": 5,
+          "size": 211948,
+          "crc32c": "c074baf7",
+          "sha256": "91a38f7fc05555f86181ecb22b363e3239bfcaaa2ff6171e98524ae64821eca9"
+        },
+        {
+          "name": "firmware/touch.bin",
+          "typeId": 3,
+          "size": 34720,
+          "crc32c": "903ca49a",
+          "sha256": "c14456cd4d432815d79700b251c9a575f75c76a3710f4148c0df6ddba4cb7ba2"
+        },
+        {
+          "name": "firmware/box.bin",
+          "typeId": 6,
+          "size": 55784,
+          "crc32c": "7d443be0",
+          "sha256": "36ca0c13558f252af286ae2b36b5e576d087d21d37b15d778e7da9f502a70374"
+        },
+        {
+          "name": "ota/s200_bootloader.bin",
+          "typeId": 1,
+          "size": 149746,
+          "crc32c": "1b91e2b5",
+          "sha256": "0d6837c3eb3153303e408ec02bc7f67ecbe77095c4f12e80bf9b45cabd3cf11e"
+        },
+        {
+          "name": "ota/s200_firmware_ota.bin",
+          "typeId": 0,
+          "size": 3697284,
+          "crc32c": "e42e29ed",
+          "sha256": "35844c95c6ffe62baca961d396c870225cdc91372f253abaece40c3e99a1c3d2"
+        }
+      ]
+    },
     {
       "id": "g2-official-2.2.8.4",
       "channel": "official",
@@ -1027,6 +1101,39 @@
     }
   ],
   "ringReleases": [
+    {
+      "id": "r1-official-2.2.9.0003",
+      "displayName": "Official R1 2.2.9.0003",
+      "channel": "official",
+      "trust": "official-pinned",
+      "version": "2.2.9.0003",
+      "format": "nordic-secure-dfu",
+      "url": "/firmware-updates/r1/2.2.9.0003/r1-2.2.9.0003-eac75275743ed88ed52704cf5079d4d5.zip",
+      "sourceUrl": "https://cdn.evenreal.co/firmware/eac75275743ed88ed52704cf5079d4d5.zip",
+      "fileName": "r1-2.2.9.0003-eac75275743ed88ed52704cf5079d4d5.zip",
+      "size": 655347,
+      "md5": "eac75275743ed88ed52704cf5079d4d5",
+      "sha256": "38089992808e39ad933d584d2962dc3dc9d9f51ae0dd3b30d17c8a8cf8d14de8",
+      "archivedFrom": "Even Realities CDN",
+      "minAppVersion": "2.2.9",
+      "notes": "Bug fixes.",
+      "application": {
+        "binFile": "application.bin",
+        "binSize": 654716,
+        "binSha256": "f4b5a915c160201ac15ee78aabdcfb7ba86a7f12916c9418e70fe70982c594ae",
+        "datFile": "application.dat",
+        "datSize": 141,
+        "datSha256": "f644591d8140ada88fc1e74dee5bb8c6d2fe7b2151bf8613f52f79dd6f663f42"
+      },
+      "initPacket": {
+        "applicationVersion": 3,
+        "hardwareVersion": 52,
+        "softDeviceFirmwareIds": [
+          256
+        ],
+        "signed": true
+      }
+    },
     {
       "id": "r1-official-2.2.8.0002",
       "displayName": "Official R1 2.2.8.0002",

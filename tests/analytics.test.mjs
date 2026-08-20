@@ -333,3 +333,34 @@ test("reports an empty Case as no contacts, not dead Smart Glasses", () => {
   assert.equal(analytics.smartGlasses.right.present, false);
   assert.equal(analytics.smartGlasses.right.applicationResponsive, null);
 });
+
+test("a Case-transport probe failure is not reported as an unresponsive temple", () => {
+  const analytics = buildG2DeviceAnalytics({
+    report: report(),
+    pogoResults: {
+      left: {
+        lastProbeFailure: {
+          at: "now",
+          operation: "version",
+          message: "Timed out reading Go address ACK: received 0 of 1 bytes.",
+          caseTransport: true,
+        },
+      },
+      right: { version: probe("right", "version", "2.2.8.4") },
+    },
+  });
+  const left = analytics.smartGlasses.left;
+  assert.equal(left.analysisState, "failed");
+  assert.equal(left.caseTransportFailure, true);
+  assert.equal(left.applicationResponsive, null);
+  assert.equal(left.bootState, "not-analyzed");
+  assert.match(left.bootStateBoundary, /Case-side STM32 ROM\/serial transport/);
+  assert.equal(
+    analytics.smartGlasses.recoveryAssessment.minimumPlan.action,
+    "retry-analysis",
+  );
+  assert.equal(
+    analytics.smartGlasses.recoveryAssessment.minimumPlan.executable,
+    false,
+  );
+});

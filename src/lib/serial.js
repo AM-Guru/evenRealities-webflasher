@@ -113,8 +113,18 @@ const POGO_MAXIMUM_DEFERRED_EARLY_SETTLE_MS = 8000;
 const POGO_MAXIMUM_DEFERRED_LATE_SETTLE_MS = 12000;
 const POGO_DATA_LATE_SETTLE_NUMERATOR = 3;
 const POGO_DATA_LATE_SETTLE_DENOMINATOR = 4;
-const POGO_COMPONENT_RESTART_LIMIT = 2;
-const POGO_HOST_TIMEOUT_COMPONENT_RESTART_LIMIT = 3;
+// Whole-component restart budget after a DATA failure with exact cleanup
+// proof. Pacing escalates across the budget: the first attempt runs at the
+// remembered level, every intermediate restart at tier 2, and the final
+// restart at maximum pacing (templeDataPacingMultiplierForRestart). Raising
+// this widens the tier-2 band rather than changing where maximum pacing
+// lands, so a marginal link gets more conservative attempts before the run
+// gives up. Exported so the escalation spec is asserted against the budget
+// instead of a hardcoded attempt number.
+export const POGO_COMPONENT_RESTART_LIMIT = 4;
+// A verified host-timeout restoration is a cleaner failure than a plain DATA
+// rejection, so it gets a wider budget than POGO_COMPONENT_RESTART_LIMIT.
+export const POGO_HOST_TIMEOUT_COMPONENT_RESTART_LIMIT = 6;
 const POGO_PERSISTENT_REJECTION_WINDOW_RECORDS = 64;
 const POGO_BILATERAL_ROUTE_ADAPTATION_LIMIT = 4;
 const POGO_SETUP_RESET_LIMIT = 2;
@@ -190,6 +200,64 @@ export function isExplicitTempleDataRejection(error) {
   return error instanceof TempleRejectedError;
 }
 
+// In-place DATA record recovery. Every audited case-bridge failure shares one
+// signature: hostChunkOffset 1009 (the full record left the host), zero host
+// and temple UART error counters, and acceptedSize frozen at exactly
+// expectedSequence × 1000 — the record vanished between the Case's pogo TX
+// and the temple's OTA parser without so much as a framing error, during a
+// charge-management window in which the route is silent (the same silence the
+// post-reset ladder documents at status 6). The record was therefore never
+// accepted, and resending the identical bytes with the identical sequence
+// byte is protocol-correct: the temple's own sequence guard accepts the
+// record it is waiting for, rejects a duplicate of one it already committed
+// with status 1, and rejects anything desynchronized. Recovery is bounded per
+// record and per component attempt, and a transient never touches pacing
+// memory (it is not evidence the temple was overrun).
+export const POGO_DATA_INPLACE_RESEND_LIMIT = 3;
+export const POGO_DATA_INPLACE_RECOVERY_BUDGET = 12;
+export const POGO_DATA_INPLACE_SETTLE_MS = Object.freeze([
+  2_000, 8_000, 20_000,
+]);
+
+export function classifyInPlaceDataRecovery(
+  error,
+  { resendsForRecord, recoveriesThisAttempt },
+) {
+  if (
+    !Number.isInteger(resendsForRecord) ||
+    resendsForRecord < 0 ||
+    !Number.isInteger(recoveriesThisAttempt) ||
+    recoveriesThisAttempt < 0
+  ) {
+    throw new Error("In-place recovery counters must be nonnegative integers.");
+  }
+  if (isExplicitTempleDataRejection(error)) {
+    // A status-1 rejection of a RESEND is the lost-ACK disambiguation: the
+    // temple committed the record, advanced its expected sequence, and its
+    // guard refused the duplicate. Advance to the next record. If this read
+    // is wrong — a genuine desynchronization — the next record is rejected
+    // with a zero resend count and aborts through the normal path. A
+    // first-transmission rejection is real temple evidence and always aborts.
+    if (resendsForRecord > 0 && error.status === 1) {
+      return { action: "advance" };
+    }
+    return { action: "abort" };
+  }
+  if (
+    resendsForRecord >= POGO_DATA_INPLACE_RESEND_LIMIT ||
+    recoveriesThisAttempt >= POGO_DATA_INPLACE_RECOVERY_BUDGET
+  ) {
+    return { action: "abort" };
+  }
+  return {
+    action: "resend",
+    settleMs:
+      POGO_DATA_INPLACE_SETTLE_MS[
+        Math.min(resendsForRecord, POGO_DATA_INPLACE_SETTLE_MS.length - 1)
+      ],
+  };
+}
+
 export function isPogoRoutePhaseMismatch(error) {
   return Boolean(
     error instanceof PogoFlashSafetyError &&
@@ -202,6 +270,11 @@ export function isPogoRoutePhaseMismatch(error) {
 export function isRetryablePostResetLivenessFailure(error) {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return (
+    // Transient transport faults during the read-only reset/liveness sequence
+    // are as recoverable as a missing telemetry line: the bounded second
+    // DEB0 replays the whole traced sequence from a fresh port.
+    message.includes("Failed to open serial port") ||
+    message.includes("CH340 bulk") ||
     message.includes("no framed temple response") ||
     message.includes("YHM baseline was not an allowlisted seated-idle state") ||
     message.includes("contact did not return after the final B0 reset") ||
@@ -1344,7 +1417,7 @@ function addressPacket(address) {
   return new Uint8Array([...bytes, xor([...bytes])]);
 }
 
-class SerialTransport {
+export class SerialTransport {
   constructor(port, log) {
     this.port = port;
     this.log = log;
@@ -1360,6 +1433,13 @@ class SerialTransport {
   async open(options) {
     await this.port.open(options);
     if (!this.port.readable || !this.port.writable) {
+      // The port itself opened, so it must be released here — the caller
+      // cannot tell this partial state apart from open() failing outright.
+      try {
+        await this.port.close();
+      } catch {
+        // The half-opened port may already be unusable.
+      }
       throw new Error("The serial port did not expose readable and writable streams.");
     }
     this.reader = this.port.readable.getReader();
@@ -1379,7 +1459,14 @@ class SerialTransport {
         }
       }
     } catch (error) {
-      if (error?.name !== "NetworkError" && error?.name !== "AbortError") {
+      // Deliberate teardown is detected by state, not by error name: close()
+      // nulls this.reader before cancelling, so a rejection that arrives with
+      // no reader is teardown noise. Everything else is a real transport
+      // failure and is recorded — including the NetworkError DOMException a
+      // stalled-but-still-enumerated CH340 produces, which the old
+      // name-based filter silently discarded, degrading every later read
+      // into a timeout with the cause lost.
+      if (this.reader) {
         this.readError = error;
       }
       this.notify();
@@ -1401,9 +1488,14 @@ class SerialTransport {
   }
 
   clear() {
+    // Drops buffered bytes only. A recorded pump error is preserved: once the
+    // reader loop has exited, clearing the error cannot restore data flow —
+    // it can only replace the real transport failure with a later, misleading
+    // timeout. The postflight loop drains this transport every 2 seconds, and
+    // an erased USB stall there turned into "no checksum-valid postflight
+    // version arrived within 180 seconds" with the actual cause lost.
     this.queue = [];
     this.queuedBytes = 0;
-    this.readError = null;
   }
 
   take(count = this.queuedBytes) {
@@ -1446,13 +1538,16 @@ class SerialTransport {
     while (this.queuedBytes < count && !this.readError && Date.now() < deadline) {
       await this.waitForData(Math.max(1, deadline - Date.now()));
     }
+    // Serve a complete, already-buffered response before surfacing a pump
+    // error: a device that answered in full and THEN dropped the link has
+    // still answered, and discarding those bytes converted a recoverable
+    // "last ACK arrived, then the cable moved" into a hard abort. The error
+    // is still sticky and surfaces on the next read that actually needs data.
+    if (this.queuedBytes >= count) return this.take(count);
     if (this.readError) throw this.readError;
-    if (this.queuedBytes < count) {
-      throw new Error(
-        `Timed out reading ${label}: received ${this.queuedBytes} of ${count} bytes.`,
-      );
-    }
-    return this.take(count);
+    throw new Error(
+      `Timed out reading ${label}: received ${this.queuedBytes} of ${count} bytes.`,
+    );
   }
 
   async collectFor(milliseconds) {
@@ -1523,7 +1618,7 @@ export async function drainUntilQuietLine(
   return false;
 }
 
-class Stm32Bootloader {
+export class Stm32Bootloader {
   constructor(port, log) {
     this.port = port;
     this.log = log;
@@ -1725,9 +1820,63 @@ class Stm32Bootloader {
 
   async go(address) {
     this.requireCommand(GO, "Go");
-    await this.sendCommand(GO, "Go command");
+    try {
+      await this.sendCommand(GO, "Go command");
+    } catch (error) {
+      // No address has been accepted, so the ROM provably has not jumped;
+      // callers may re-enter the loader and reissue Go unconditionally.
+      if (error && typeof error === "object") error.romGoStage = "command";
+      throw error;
+    }
     await this.transport.write(addressPacket(address));
-    await this.expectAck("Go address");
+    try {
+      await this.expectAck("Go address");
+    } catch (error) {
+      // The transport's sticky readError is one shared object: an earlier
+      // command-stage failure may have tagged this same instance, so the
+      // address stage must overwrite the tag rather than trust a stale one.
+      if (error && typeof error === "object") error.romGoStage = "address";
+      throw error;
+    }
+  }
+
+  // Launch bridge code that is already byte-verified in SRAM. The remote
+  // Case link drops single ACK bytes (the same loss the 5-attempt read retry
+  // absorbs), so Go gets a bounded recovery split by what each stage proves:
+  // a command-stage failure means the ROM cannot have jumped, so a
+  // boot-select re-entry — which retains SRAM — restores a known state and
+  // Go is reissued; an address-stage failure cannot distinguish a lost ACK
+  // from a lost address packet, and the jump may already have happened, so
+  // Go is never reissued — the caller must treat the bridge banner as the
+  // outcome proof instead.
+  async goWithLostAckRecovery(address, { attempts = 3 } = {}) {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await this.go(address);
+        return { goAckLost: false };
+      } catch (error) {
+        if (error?.romGoStage === "address") {
+          this.log?.(
+            `The Go address ACK was not received (${error.message}); the jump may still have happened, so the bridge banner decides the outcome instead of a Go replay.`,
+            "warn",
+          );
+          return { goAckLost: true };
+        }
+        if (attempt === attempts) throw error;
+        this.log?.(
+          `ROM Go retry ${attempt + 1}/${attempts} after ${error?.message ?? String(error)}`,
+          "warn",
+        );
+        try {
+          await this.close();
+          await delay(120);
+          await this.connect();
+        } catch {
+          // A failed re-entry is itself transient; the next Go attempt
+          // surfaces it and is counted against the same bound.
+        }
+      }
+    }
   }
 
   async releaseBootSelection() {
@@ -1756,13 +1905,30 @@ class Stm32Bootloader {
       throw new Error("ROM writes must contain 4–256 bytes in a multiple of four.");
     }
     this.requireCommand(WRITE_MEMORY, "Write Memory");
-    await this.sendCommand(WRITE_MEMORY, "Write Memory command");
-    await this.transport.write(addressPacket(address));
-    await this.expectAck("Write Memory address");
+    try {
+      await this.sendCommand(WRITE_MEMORY, "Write Memory command");
+      await this.transport.write(addressPacket(address));
+      await this.expectAck("Write Memory address");
+    } catch (error) {
+      // No data byte has been sent yet, so nothing can have been programmed;
+      // callers may replay this write unconditionally.
+      if (error && typeof error === "object") error.romWriteStage = "setup";
+      throw error;
+    }
     const encodedSize = bytes.length - 1;
     const body = [encodedSize, ...bytes];
-    await this.transport.write(new Uint8Array([...body, xor(body)]));
-    await this.expectAck("Write Memory data", timeoutMs);
+    try {
+      await this.transport.write(new Uint8Array([...body, xor(body)]));
+      await this.expectAck("Write Memory data", timeoutMs);
+    } catch (error) {
+      // The transport's sticky readError is one shared object: an earlier
+      // setup-stage failure may have tagged this same instance. A data-phase
+      // failure must never carry the replay-safe tag, so strip a stale one.
+      if (error && typeof error === "object" && error.romWriteStage) {
+        delete error.romWriteStage;
+      }
+      throw error;
+    }
   }
 
   async writeRange(address, input, onProgress) {
@@ -1773,7 +1939,38 @@ class Stm32Bootloader {
       const block = new Uint8Array(paddedLength);
       block.fill(0xff);
       block.set(source);
-      await this.writeMemory(address + offset, block);
+      const blockAddress = address + offset;
+      // A staged Case image is ~2,000 consecutive single-ACK exchanges over
+      // the same CH340 link whose reads needed a 5-attempt bounded retry.
+      // Writes get the same treatment, but gated by what is provably safe to
+      // replay: volatile SRAM is byte-for-byte idempotent at any stage, while
+      // flash on this part refuses re-programming a non-erased word, so a
+      // flash block is replayed only when the failure preceded the data
+      // phase (romWriteStage "setup", nothing programmed).
+      const sramTarget =
+        blockAddress >= 0x20000000 && blockAddress < 0x20040000;
+      const writeAttempts = 3;
+      for (let attempt = 1; attempt <= writeAttempts; attempt += 1) {
+        try {
+          await this.writeMemory(blockAddress, block);
+          break;
+        } catch (error) {
+          const replaySafe = sramTarget || error?.romWriteStage === "setup";
+          if (!replaySafe || attempt === writeAttempts) throw error;
+          this.log?.(
+            `ROM write retry ${attempt + 1}/${writeAttempts} at 0x${blockAddress.toString(16)} after ${error?.message ?? String(error)}`,
+            "warn",
+          );
+          try {
+            await this.close();
+            await delay(120);
+            await this.connect();
+          } catch {
+            // A failed re-entry is itself transient; the next write attempt
+            // surfaces it and is counted against the same bound.
+          }
+        }
+      }
       onProgress?.((offset + source.length) / bytes.length);
     }
   }
@@ -1781,18 +1978,38 @@ class Stm32Bootloader {
 
 async function openNormalConsole(port) {
   const transport = new SerialTransport(port);
-  await transport.open({
-    baudRate: 1_000_000,
-    dataBits: 8,
-    stopBits: 1,
-    parity: "none",
-    flowControl: "none",
-    bufferSize: 65536,
-  });
-  await transport.setSignals(true, true);
-  await delay(60);
-  await transport.setSignals(true, false);
-  return transport;
+  // A partial open must not strand the port: setSignals is a real CH340
+  // control transfer that can fail after open() has already taken the
+  // reader/writer locks, and leaving them held made every later open in the
+  // page fail with "already open" until the tab was reloaded. But cleanup is
+  // gated on OUR open having succeeded — when open() itself threw (for
+  // example because another live transport already holds this shared port),
+  // closing here would tear the port down under its legitimate user.
+  let opened = false;
+  try {
+    await transport.open({
+      baudRate: 1_000_000,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+      flowControl: "none",
+      bufferSize: 65536,
+    });
+    opened = true;
+    await transport.setSignals(true, true);
+    await delay(60);
+    await transport.setSignals(true, false);
+    return transport;
+  } catch (error) {
+    if (opened) {
+      try {
+        await transport.close();
+      } catch {
+        // The failed open may already have torn the port down.
+      }
+    }
+    throw error;
+  }
 }
 
 async function queryNormal(transport, command, duration = 850) {
@@ -1917,8 +2134,8 @@ class CasePogoFlashTransport {
       await this.loader.connect();
       requireReviewedCaseRom(this.loader);
 
-      await this.loader.writeMemory(POGO_FLASH_PROOF_ADDRESS, zeroProof);
-      await this.loader.writeMemory(POGO_FLASH_RESULT_ADDRESS, zeroResult);
+      await this.loader.writeRange(POGO_FLASH_PROOF_ADDRESS, zeroProof);
+      await this.loader.writeRange(POGO_FLASH_RESULT_ADDRESS, zeroResult);
       const initialProof = await this.loader.readRange(
         POGO_FLASH_PROOF_ADDRESS,
         zeroProof.length,
@@ -1938,7 +2155,7 @@ class CasePogoFlashTransport {
       for (let offset = 0; offset < payload.length; offset += 256) {
         const chunk = payload.subarray(offset, Math.min(offset + 256, payload.length));
         const address = POGO_FLASH_BRIDGE_ADDRESS + offset;
-        await this.loader.writeMemory(address, chunk);
+        await this.loader.writeRange(address, chunk);
         const readback = await this.loader.readRange(address, chunk.length);
         if (!equalBytes(readback, chunk)) {
           throw new PogoFlashSafetyError(
@@ -1950,7 +2167,9 @@ class CasePogoFlashTransport {
           `${this.route}: verifying volatile flash bridge`,
         );
       }
-      await this.loader.go(POGO_FLASH_BRIDGE_ADDRESS);
+      const { goAckLost } = await this.loader.goWithLostAckRecovery(
+        POGO_FLASH_BRIDGE_ADDRESS,
+      );
       await this.loader.releaseBootSelection();
       this.bridgeLaunched = true;
       this.bridge = this.loader.takeTransport();
@@ -1958,11 +2177,17 @@ class CasePogoFlashTransport {
 
       const banner = await this.bridge.readExact(
         POGO_FLASH_BRIDGE_BANNER.length,
-        3000,
+        goAckLost ? 6000 : 3000,
         "flash bridge banner",
       );
       if (!equalBytes(banner, POGO_FLASH_BRIDGE_BANNER)) {
         throw new PogoFlashSafetyError("The volatile flash bridge banner is invalid.");
+      }
+      if (goAckLost) {
+        this.session.log(
+          `${this.route}: the verified flash bridge banner arrived after the lost Go ACK, proving the launch; continuing normally.`,
+          "warn",
+        );
       }
 
       const setup = makePogoFlashSetup(this.route);
@@ -2243,11 +2468,29 @@ class CasePogoFlashTransport {
     if (!Number.isFinite(milliseconds) || milliseconds < 0) {
       throw new PogoFlashSafetyError("Temple storage settle time is invalid.");
     }
+    // Deadline accounting: each keepalive's round trip counts toward the
+    // settle instead of stretching it, so a long settle ends when it should.
+    const deadline = Date.now() + milliseconds;
     let remaining = milliseconds;
     while (remaining > 5000) {
       await delay(5000);
-      remaining -= 5000;
-      await this.stressHostReceive(1);
+      // The keepalive protects the host link while the temple digests; it is
+      // host-only and never reaches the temple. One transient failure must
+      // not abort the DATA transfer this settle is protecting — retry once
+      // on a drained line, and only a second consecutive failure surfaces.
+      try {
+        await this.stressHostReceive(1);
+      } catch (error) {
+        if (!(error instanceof RetryablePogoFlashError)) throw error;
+        this.session.log(
+          `One host-only keepalive failed transiently during the storage settle (${error.message}); retrying once on a drained line.`,
+          "warn",
+        );
+        this.drainInput();
+        await delay(250);
+        await this.stressHostReceive(1);
+      }
+      remaining = deadline - Date.now();
     }
     if (remaining > 0) await delay(remaining);
   }
@@ -2276,11 +2519,35 @@ class CasePogoFlashTransport {
   async verifyAndClearRetainedResult() {
     const zeroProof = new Uint8Array(POGO_FLASH_PROOF.length);
     const zeroResult = new Uint8Array(POGO_FLASH_RESULT_LENGTH);
-    this.loader = new Stm32Bootloader(this.port, this.session.log);
     let validationError = null;
     try {
-      await this.loader.connect();
-      requireReviewedCaseRom(this.loader);
+      // Bounded like openProbeLoader's ROM re-entry. This runs in the
+      // mandatory teardown of every route: a single CH340/boot-select glitch
+      // here used to mark a fully verified transfer failed_or_uncertain, so
+      // the proof-read must tolerate the same transient re-entry flakiness
+      // enterRomLoader already retries for.
+      this.loader = await retryReadOnlyBlock(
+        async () => {
+          const candidate = new Stm32Bootloader(this.port, this.session.log);
+          try {
+            await candidate.connect();
+            requireReviewedCaseRom(candidate);
+            return candidate;
+          } catch (error) {
+            await candidate.close();
+            throw error;
+          }
+        },
+        async () => delay(400),
+        {
+          attempts: 3,
+          onRetry: (error, attempt) =>
+            this.session.log(
+              `${this.route}: retained-proof loader synchronization retry ${attempt}/2 after ${error.message}`,
+              "warn",
+            ),
+        },
+      );
       const proof = await this.loader.readRange(
         POGO_FLASH_PROOF_ADDRESS,
         POGO_FLASH_PROOF.length,
@@ -2382,8 +2649,8 @@ class CasePogoFlashTransport {
         );
       }
 
-      await this.loader.writeMemory(POGO_FLASH_PROOF_ADDRESS, zeroProof);
-      await this.loader.writeMemory(POGO_FLASH_RESULT_ADDRESS, zeroResult);
+      await this.loader.writeRange(POGO_FLASH_PROOF_ADDRESS, zeroProof);
+      await this.loader.writeRange(POGO_FLASH_RESULT_ADDRESS, zeroResult);
       const proofCheck = await this.loader.readRange(
         POGO_FLASH_PROOF_ADDRESS,
         zeroProof.length,
@@ -2478,6 +2745,36 @@ export class G2CaseSession {
     // memory, audit fingerprints) attach to the right physical unit.
     this.deviceKey = PACING_UNKNOWN_DEVICE_KEY;
     this.caseStorageSerial = null;
+  }
+
+  // Narrate long settles the way the postflight window narrates its wait:
+  // the settle ladder holds the Case deliberately untouched for up to 300 s
+  // per rung, and one log line followed by minutes of silence reads as a
+  // hang at exactly the moment the operator must not pull the cable. The
+  // heartbeat runs on wall-clock time beside the single this.wait call, so
+  // injected test waits observe the identical call sequence.
+  async waitNarrated(milliseconds, narrate) {
+    if (
+      !Number.isFinite(milliseconds) ||
+      milliseconds <= POGO_POSTFLIGHT_HEARTBEAT_MS ||
+      typeof narrate !== "function"
+    ) {
+      return this.wait(milliseconds);
+    }
+    const startedAt = Date.now();
+    const heartbeat = setInterval(() => {
+      const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+      const remainingSeconds = Math.max(
+        0,
+        Math.round(milliseconds / 1000 - elapsedSeconds),
+      );
+      narrate(elapsedSeconds, remainingSeconds);
+    }, POGO_POSTFLIGHT_HEARTBEAT_MS);
+    try {
+      return await this.wait(milliseconds);
+    } finally {
+      clearInterval(heartbeat);
+    }
   }
 
   // Called once telemetry identifies the exact case. Seeds this session's
@@ -2937,8 +3234,25 @@ export class G2CaseSession {
             : `${route} ${operation}: YHM baseline ${evidence.baselineHex} is outside the active seated-idle profile; retained SRAM proves zero YHM writes and zero temple bytes. Leaving the normal Case app undisturbed for ${settleSeconds} seconds before bounded stock-app settle ${settleIndex}/${POGO_READ_ONLY_PHASE_SETTLE_MS.length}.`,
           "warn",
         );
-        await this.wait(settleMilliseconds);
-        const readiness = await this.readTempleFlashPreflight([route]);
+        await this.waitNarrated(settleMilliseconds, (elapsed, remaining) =>
+          this.log(
+            `${route} ${operation}: still settling · ${elapsed} s elapsed, ${remaining} s remaining in this bounded stock-app settle. The Case is deliberately untouched; do not disconnect.`,
+          ),
+        );
+        // Bounded so one transient console failure cannot discard the settle
+        // this rung just spent minutes earning.
+        const readiness = await retryReadOnlyBlock(
+          () => this.readTempleFlashPreflight([route]),
+          async () => this.wait(1200),
+          {
+            attempts: 2,
+            onRetry: (error) =>
+              this.log(
+                `${route} ${operation}: the post-settle contact re-check failed transiently (${error.message}); one bounded retry follows so the completed ${settleSeconds}-second settle is not discarded.`,
+                "warn",
+              ),
+          },
+        );
         this.log(
           `${route} ${operation}: Case ${readiness.caseVersion} and seated contact re-confirmed after the ${settleSeconds}-second stock-app settle.`,
         );
@@ -2975,6 +3289,7 @@ export class G2CaseSession {
     let bridge = null;
     let bridgeLoaded = false;
     let residueCleared = false;
+    let templeQueried = false;
 
     const openProbeLoader = async (purpose) =>
       retryReadOnlyBlock(
@@ -3023,8 +3338,8 @@ export class G2CaseSession {
     const clearRetainedBridgeData = async () => {
       const cleanupLoader = await openProbeLoader("Pogo cleanup");
       try {
-        await cleanupLoader.writeMemory(POGO_BRIDGE_PROOF_ADDRESS, zeroProof);
-        await cleanupLoader.writeMemory(POGO_BRIDGE_RESULT_ADDRESS, zeroResult);
+        await cleanupLoader.writeRange(POGO_BRIDGE_PROOF_ADDRESS, zeroProof);
+        await cleanupLoader.writeRange(POGO_BRIDGE_RESULT_ADDRESS, zeroResult);
         const proofCheck = await cleanupLoader.readRange(
           POGO_BRIDGE_PROOF_ADDRESS,
           zeroProof.length,
@@ -3060,12 +3375,12 @@ export class G2CaseSession {
         loader.requireCommand(command, label);
       }
 
-      await loader.writeMemory(POGO_BRIDGE_PROOF_ADDRESS, zeroProof);
-      await loader.writeMemory(POGO_BRIDGE_RESULT_ADDRESS, zeroResult);
+      await loader.writeRange(POGO_BRIDGE_PROOF_ADDRESS, zeroProof);
+      await loader.writeRange(POGO_BRIDGE_RESULT_ADDRESS, zeroResult);
       for (let offset = 0; offset < payload.length; offset += 256) {
         const chunk = payload.subarray(offset, Math.min(offset + 256, payload.length));
         const address = POGO_BRIDGE_ADDRESS + offset;
-        await loader.writeMemory(address, chunk);
+        await loader.writeRange(address, chunk);
         const readback = await loader.readRange(address, chunk.length);
         if (!equalBytes(readback, chunk)) {
           throw new Error(
@@ -3080,7 +3395,9 @@ export class G2CaseSession {
       bridgeLoaded = true;
       this.log(`Verified all ${payload.length} pinned SRAM bridge bytes.`);
 
-      await loader.go(POGO_BRIDGE_ADDRESS);
+      const { goAckLost } = await loader.goWithLostAckRecovery(
+        POGO_BRIDGE_ADDRESS,
+      );
       // Both pinned bridges deliberately retain the ROM loader's 115200 8E1
       // host framing. Keep one Web Serial session so CH340 close/open control
       // transitions cannot reset the Case between GO and the bridge banner.
@@ -3090,13 +3407,20 @@ export class G2CaseSession {
 
       const banner = await bridge.readExact(
         POGO_BRIDGE_BANNER.length,
-        3000,
+        goAckLost ? 6000 : 3000,
         "pogo bridge banner",
       );
       if (!equalBytes(banner, POGO_BRIDGE_BANNER)) {
         throw new Error("The volatile pogo bridge banner is invalid.");
       }
+      if (goAckLost) {
+        this.log(
+          `${route} ${operation}: the verified bridge banner arrived after the lost Go ACK, proving the launch; continuing normally.`,
+          "warn",
+        );
+      }
       const request = makePogoBridgeRequest(operation, route);
+      templeQueried = true;
       await bridge.write(request);
       const header = await bridge.readExact(12, 5000, "pogo bridge response header");
       const capturedLength = header[9];
@@ -3151,8 +3475,8 @@ export class G2CaseSession {
       );
       reportProgress(0.84, "Router restoration proof verified");
 
-      await loader.writeMemory(POGO_BRIDGE_PROOF_ADDRESS, zeroProof);
-      await loader.writeMemory(POGO_BRIDGE_RESULT_ADDRESS, zeroResult);
+      await loader.writeRange(POGO_BRIDGE_PROOF_ADDRESS, zeroProof);
+      await loader.writeRange(POGO_BRIDGE_RESULT_ADDRESS, zeroResult);
       const proofCheck = await loader.readRange(
         POGO_BRIDGE_PROOF_ADDRESS,
         zeroProof.length,
@@ -3192,6 +3516,15 @@ export class G2CaseSession {
         transportProof,
         yhmProfile,
       };
+    } catch (error) {
+      // Failures on the Case-side ROM/serial transport before the bridge
+      // request ever went out carry no evidence about the temple; tag them
+      // so evidence and recovery planning do not misattribute a Case link
+      // fault as an unresponsive temple.
+      if (!templeQueried && error && typeof error === "object") {
+        error.caseTransportFailure = true;
+      }
+      throw error;
     } finally {
       await closeOpenTransports();
       if (bridgeLoaded && !residueCleared) {
@@ -3521,8 +3854,13 @@ export class G2CaseSession {
       attempt <= POGO_INTERMEDIATE_RESET_ATTEMPTS;
       attempt += 1
     ) {
-      const resetReport = await this.restartAndRecheck();
       try {
+        // Inside the try like resetAndVerifyTemplesBounded's reset: a "Case
+        // did not confirm the traced B0" or missing-telemetry throw from the
+        // reset itself is exactly what the bounded second attempt exists for,
+        // and letting it escape the loop aborted a component restart that had
+        // already proven its cleanup.
+        const resetReport = await this.restartAndRecheck();
         const { versions, finalCase } =
           await this.verifyPostResetTempleLiveness(
             resetReport,
@@ -3756,49 +4094,98 @@ export class G2CaseSession {
         const data = payload.subarray(offset, Math.min(offset + 1000, payload.length));
         const final = index + 1 === totalRecords;
         const request = makeOtaDataRequest(data, final, index & 0xff);
-        const transactStartedAt = Date.now();
-        try {
-          const response = await transport.transact(request, 15000);
-          requireOtaAcknowledgement(response, 0x54);
-        } catch (error) {
-          result.dataPacingPolicy = {
-            ...result.dataPacingPolicy,
-            ...pacing.summary(),
-          };
-          // Only an explicit temple rejection says anything about pacing. A
-          // transport failure — a dropped remote-support relay, an unplugged
-          // cable — carries no evidence that the temple was overrun, so it
-          // must not escalate the remembered level. Observed 2026-07-28: a
-          // relay session expiring mid-DATA left the memory one level slower,
-          // and the next run paid that penalty on every record.
-          if (!isExplicitTempleDataRejection(error)) throw error;
-          const pacingMemory = pacing.commitMemory("failed");
-          result.dataPacingPolicy = {
-            ...result.dataPacingPolicy,
-            ...pacing.summary(),
-            nextStartLevel: pacingMemory.level,
-            nextCleanStreak: pacingMemory.cleanStreak,
-          };
-          result.dataRejection = {
-            command: error.command,
-            status: error.status,
-            record: index + 1,
-            recordIndex: index,
-            acceptedBytes,
-            totalBytes: payload.length,
-          };
-          this.log(
-            `${route}: explicit rejection left DATA record ${index + 1} unadvanced; ending this component attempt without replaying the record. Any permitted fresh component attempt will retain at least pacing level ${pacingMemory.level}.`,
-            "warn",
-          );
-          throw error;
+        let transactStartedAt = Date.now();
+        let resendsForRecord = 0;
+        let recordAcknowledged = false;
+        for (;;) {
+          transactStartedAt = Date.now();
+          try {
+            // readBridgeResponse inflates this to max(20000, t + 30000), so a
+            // marginal link gets ~70 s per record to recover a stalled
+            // response before an in-place resend is even considered. This is
+            // a technician-side wait only: it is not an exchange-batch step
+            // bound, so it does not depend on the customer's deployed build
+            // honouring a larger EXCHANGE_BATCH_MAX_STEP_TIMEOUT_MS.
+            const response = await transport.transact(request, 40000);
+            requireOtaAcknowledgement(response, 0x54);
+            recordAcknowledged = true;
+            break;
+          } catch (error) {
+            result.dataPacingPolicy = {
+              ...result.dataPacingPolicy,
+              ...pacing.summary(),
+            };
+            const decision = classifyInPlaceDataRecovery(error, {
+              resendsForRecord,
+              recoveriesThisAttempt: result.dataInPlaceRecovery?.resends ?? 0,
+            });
+            if (decision.action === "resend") {
+              resendsForRecord += 1;
+              result.dataInPlaceRecovery = {
+                resends: (result.dataInPlaceRecovery?.resends ?? 0) + 1,
+                lostAckAdvances:
+                  result.dataInPlaceRecovery?.lostAckAdvances ?? 0,
+                settledMs:
+                  (result.dataInPlaceRecovery?.settledMs ?? 0) +
+                  decision.settleMs,
+              };
+              this.log(
+                `${route}: DATA record ${index + 1}/${totalRecords} drew no temple reply (${error?.message ?? error}); settling ${decision.settleMs} ms for the route to leave its silent window, then resending the identical record in place (resend ${resendsForRecord}/${POGO_DATA_INPLACE_RESEND_LIMIT}). The temple's sequence guard accepts only the record it is waiting for.`,
+                "warn",
+              );
+              await transport.settleTempleStorage(decision.settleMs);
+              continue;
+            }
+            if (decision.action === "advance") {
+              result.dataInPlaceRecovery = {
+                resends: result.dataInPlaceRecovery?.resends ?? 0,
+                lostAckAdvances:
+                  (result.dataInPlaceRecovery?.lostAckAdvances ?? 0) + 1,
+                settledMs: result.dataInPlaceRecovery?.settledMs ?? 0,
+              };
+              this.log(
+                `${route}: the temple rejected the resent DATA record ${index + 1} with status 1 — it already committed this record and its acknowledgement was lost. Advancing to the next record; a genuine desynchronization would reject that one immediately.`,
+                "warn",
+              );
+              break;
+            }
+            // Only an explicit temple rejection says anything about pacing. A
+            // transport failure — a dropped remote-support relay, an unplugged
+            // cable — carries no evidence that the temple was overrun, so it
+            // must not escalate the remembered level. Observed 2026-07-28: a
+            // relay session expiring mid-DATA left the memory one level slower,
+            // and the next run paid that penalty on every record.
+            if (!isExplicitTempleDataRejection(error)) throw error;
+            const pacingMemory = pacing.commitMemory("failed");
+            result.dataPacingPolicy = {
+              ...result.dataPacingPolicy,
+              ...pacing.summary(),
+              nextStartLevel: pacingMemory.level,
+              nextCleanStreak: pacingMemory.cleanStreak,
+            };
+            result.dataRejection = {
+              command: error.command,
+              status: error.status,
+              record: index + 1,
+              recordIndex: index,
+              acceptedBytes,
+              totalBytes: payload.length,
+            };
+            this.log(
+              `${route}: explicit rejection left DATA record ${index + 1} unadvanced; ending this component attempt without replaying the record. Any permitted fresh component attempt will retain at least pacing level ${pacingMemory.level}.`,
+              "warn",
+            );
+            throw error;
+          }
         }
-        const congestionSettleMs = pacing.noteAckLatency(
-          index,
-          Date.now() - transactStartedAt,
-        );
-        if (congestionSettleMs > 0) {
-          await transport.settleTempleStorage(congestionSettleMs);
+        if (recordAcknowledged) {
+          const congestionSettleMs = pacing.noteAckLatency(
+            index,
+            Date.now() - transactStartedAt,
+          );
+          if (congestionSettleMs > 0) {
+            await transport.settleTempleStorage(congestionSettleMs);
+          }
         }
         acceptedBytes += data.length;
         result.acceptedFirmwareBytes = acceptedBytes;
@@ -4232,7 +4619,15 @@ export class G2CaseSession {
               (index / routes.length) * 0.9,
               `${route}: waiting ${Math.round(settleMs / 1000)} s for the charging route to settle`,
             );
-            await this.wait(settleMs);
+            await this.waitNarrated(settleMs, (elapsed, remaining) => {
+              this.log(
+                `${route}: still waiting for the charging route to settle · ${elapsed} s elapsed, ${remaining} s remaining. Do not disconnect.`,
+              );
+              this.progress(
+                (index / routes.length) * 0.9,
+                `${route}: settling · ${elapsed} s elapsed of ${Math.round(settleMs / 1000)} s`,
+              );
+            });
             index -= 1;
             continue;
           }
@@ -4318,16 +4713,27 @@ export class G2CaseSession {
               expectedSourceVersion ??
               targetReportedVersion;
             const expectedVersionByRoute = Object.fromEntries(
-              livenessRoutes.map((livenessRoute) => [
-                livenessRoute,
-                audit.routeResults.some(
-                  (completed) =>
-                    completed?.route === livenessRoute &&
-                    completed?.outcome === "success",
-                )
-                  ? targetReportedVersion
-                  : restartingRouteVersion,
-              ]),
+              livenessRoutes.map((livenessRoute) => {
+                // A seated temple outside this run's route selection was
+                // never written to. On a split pair it legitimately holds a
+                // different image than the route being repaired, so predicting
+                // either the source or the target version for it is wrong.
+                // Verify only that its application came back — hardware
+                // revision plus a checksum-valid version reply.
+                if (!routes.includes(livenessRoute)) {
+                  return [livenessRoute, null];
+                }
+                return [
+                  livenessRoute,
+                  audit.routeResults.some(
+                    (completed) =>
+                      completed?.route === livenessRoute &&
+                      completed?.outcome === "success",
+                  )
+                    ? targetReportedVersion
+                    : restartingRouteVersion,
+                ];
+              }),
             );
             audit.routeComponentRestartResets.push(
               await this.resetTempleOtaReceiverForComponentRestart(
@@ -4348,7 +4754,16 @@ export class G2CaseSession {
       }
       audit.finalResetAndLiveness = await this.finalizeTempleRestore(
         livenessRoutes,
-        targetReportedVersion,
+        // Only the routes this run actually wrote should be asserted at the
+        // target. An untouched seated temple is verified for liveness alone;
+        // asserting the target on it fails every correct one-route repair of
+        // a split pair.
+        Object.fromEntries(
+          livenessRoutes.map((livenessRoute) => [
+            livenessRoute,
+            routes.includes(livenessRoute) ? targetReportedVersion : null,
+          ]),
+        ),
       );
       if (audit.sourceValidation) {
         audit.sourceValidation.routePreflight = Object.fromEntries(
@@ -4540,7 +4955,22 @@ export class G2CaseSession {
     }
 
     await delay(1200);
-    const report = await this.restartAndRecheck();
+    // The bank selection is already committed above. This is verification
+    // only, so a transient console failure here must not report the
+    // activation itself as failed — that misread turns a succeeded bank
+    // switch into a spurious recovery cycle.
+    const report = await retryReadOnlyBlock(
+      () => this.restartAndRecheck(),
+      async () => this.wait(1500),
+      {
+        attempts: 2,
+        onRetry: (error) =>
+          this.log(
+            `The post-activation restart check failed transiently (${error.message}); one bounded retry follows. The bank selection is already committed.`,
+            "warn",
+          ),
+      },
+    );
     reportProgress(1, "Activated and restarted");
     return report;
   }

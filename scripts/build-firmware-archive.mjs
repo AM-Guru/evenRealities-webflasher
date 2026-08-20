@@ -61,6 +61,17 @@ function r1Release({
 
 const R1_RELEASES = [
   r1Release({
+    version: "2.2.9.0003",
+    minAppVersion: "2.2.9",
+    notes: "Bug fixes.",
+    size: 655347,
+    md5: "eac75275743ed88ed52704cf5079d4d5",
+    sha256: "38089992808e39ad933d584d2962dc3dc9d9f51ae0dd3b30d17c8a8cf8d14de8",
+    binSize: 654716,
+    binSha256: "f4b5a915c160201ac15ee78aabdcfb7ba86a7f12916c9418e70fe70982c594ae",
+    datSha256: "f644591d8140ada88fc1e74dee5bb8c6d2fe7b2151bf8613f52f79dd6f663f42",
+  }),
+  r1Release({
     version: "2.2.8.0002",
     minAppVersion: "2.2.8",
     notes: "Bug fixes.",
@@ -284,6 +295,14 @@ const RELEASES = [
     size: 4335715,
     notes:
       "Enhanced Bluetooth connection stability and Teleprompt AI noise reduction; fixed Teleprompt Remote Control and earlier-version firmware update failures in specific scenarios.",
+  },
+  {
+    version: "2.2.9.22",
+    hash: "fc250b05e98a9ff998b4b68f5f99f994",
+    sha256: "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561",
+    size: 4476518,
+    notes:
+      "Changed the Menu gesture to tap then long press; allows more settings while features run, lets features continue with the display off, and supports ending features via Even AI.",
   },
   {
     version: "2.2.8.4",

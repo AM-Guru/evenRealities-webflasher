@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   R1_PINNED_RELEASE,
   R1_PINNED_RELEASES,
+  R1_DFU_OBJECT_ATTEMPTS,
   R1_DFU_PACKET_RECEIPT_INTERVAL,
   R1SecureDfuSession,
   assertPinnedR1Release,
@@ -22,20 +23,20 @@ function checksumResponse(offset, checksum) {
 }
 
 const archivePath = new URL(
-  "../public/firmware-updates/r1/2.2.8.0002/r1-2.2.8.0002-ce5aa289bf6c95a293d41bd48c123e40.zip",
+  "../public/firmware-updates/r1/2.2.9.0003/r1-2.2.9.0003-eac75275743ed88ed52704cf5079d4d5.zip",
   import.meta.url,
 );
 
 test("reviewed R1 archive and both Nordic DFU components verify exactly", async () => {
   const archive = await readFile(archivePath);
   const prepared = await prepareR1DfuPackage(archive, R1_PINNED_RELEASE);
-  assert.equal(R1_PINNED_RELEASE.version, "2.2.8.0002");
-  assert.equal(prepared.application.length, 650284);
+  assert.equal(R1_PINNED_RELEASE.version, "2.2.9.0003");
+  assert.equal(prepared.application.length, 654716);
   assert.equal(prepared.initPacket.length, 141);
 });
 
 test("every API-visible R1 release remains pinned and available for recovery", async () => {
-  assert.equal(R1_PINNED_RELEASES.length, 11);
+  assert.equal(R1_PINNED_RELEASES.length, 12);
   assert.equal(R1_PINNED_RELEASES.at(-1).version, "2.0.3.0013");
 
   for (const release of R1_PINNED_RELEASES) {
@@ -95,7 +96,7 @@ test("Nordic CRC32 and Secure DFU response parsing match the wire contract", () 
 
 class RecordingDfuSession extends R1SecureDfuSession {
   constructor(selection) {
-    super({});
+    super({}, { firstObjectSettleMs: 0, objectRetrySettleMs: 0 });
     this.selection = selection;
     this.events = [];
   }
@@ -159,6 +160,72 @@ test("R1 DFU commits a matching boundary before creating the next data object", 
     ["verify", 8, crc32(application)],
     ["command", [0x04]],
   ]);
+});
+
+test("R1 DFU rewrites a data object whose checksum disagrees instead of aborting", async () => {
+  const application = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+  const session = new RecordingDfuSession({
+    maximumSize: 4,
+    offset: 0,
+    crc: 0,
+  });
+  let verifies = 0;
+  session.verifyOffset = async (offset, crc) => {
+    session.events.push(["verify", offset, crc]);
+    verifies += 1;
+    if (verifies === 1) {
+      const error = new Error(
+        "R1 DFU verification failed at checksum mismatch at byte 4.",
+      );
+      error.code = "R1_DFU_CRC_MISMATCH";
+      throw error;
+    }
+  };
+
+  await session.transferApplication(application);
+
+  assert.deepEqual(session.events, [
+    ["select", 2],
+    ["create", 2, 4],
+    ["write", [1, 2, 3, 4]],
+    ["verify", 4, crc32(application.subarray(0, 4))],
+    // CREATE resets the object's write pointer, so the retry replays exactly
+    // the first object's bytes and nothing earlier.
+    ["create", 2, 4],
+    ["write", [1, 2, 3, 4]],
+    ["verify", 4, crc32(application.subarray(0, 4))],
+    ["command", [0x04]],
+    ["create", 2, 4],
+    ["write", [5, 6, 7, 8]],
+    ["verify", 8, crc32(application)],
+    ["command", [0x04]],
+  ]);
+});
+
+test("a persistent R1 object checksum failure stays bounded and surfaces", async () => {
+  const application = Uint8Array.from([1, 2, 3, 4]);
+  const session = new RecordingDfuSession({
+    maximumSize: 4,
+    offset: 0,
+    crc: 0,
+  });
+  let creates = 0;
+  const originalCreate = session.createObject.bind(session);
+  session.createObject = async (type, size) => {
+    creates += 1;
+    await originalCreate(type, size);
+  };
+  session.verifyOffset = async () => {
+    const error = new Error("R1 DFU verification failed at byte 4.");
+    error.code = "R1_DFU_CRC_MISMATCH";
+    throw error;
+  };
+
+  await assert.rejects(
+    session.transferApplication(application),
+    /verification failed/,
+  );
+  assert.equal(creates, R1_DFU_OBJECT_ATTEMPTS);
 });
 
 test("R1 DFU keeps PRNs disabled for init and enables the Nordic 12-packet window for data", async () => {

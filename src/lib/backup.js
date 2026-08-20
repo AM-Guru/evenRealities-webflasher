@@ -1,13 +1,15 @@
 import {
   FLASH_BASE,
   OPTION_BASE,
+  base64ToBytes,
   bytesToBase64,
   hex,
   hexBytes,
   parseFirmwareInput,
+  sha256Hex,
 } from "./firmware.js";
 
-export const SYSTEM_BACKUP_SCHEMA_VERSION = 2;
+export const SYSTEM_BACKUP_SCHEMA_VERSION = 3;
 
 function officialChannel(release) {
   return (release?.channel ?? "official") === "official";
@@ -23,25 +25,43 @@ function templeVersion(probe, side) {
   return version;
 }
 
-export function findMatchingGlassesRecoveryRelease(catalog, templeProbes) {
-  const leftVersion = templeVersion(templeProbes?.left, "left");
-  const rightVersion = templeVersion(templeProbes?.right, "right");
-  if (leftVersion !== rightVersion) {
-    throw new Error(
-      `The seated temples report different firmware versions (${leftVersion} and ${rightVersion}).`,
-    );
+// A split pair is exactly the state an interrupted cross-version update can
+// leave behind and exactly when a technician most wants a backup. Resolution
+// is therefore per route against this fork's official-only archive. A version
+// with no official bundle degrades to an explicit recorded omission — the case
+// bytes and live temple snapshots are the irreplaceable parts of the backup;
+// bundles are re-downloadable.
+export function resolveGlassesRecoveryReleases(catalog, templeProbes) {
+  const routes = {};
+  for (const side of ["left", "right"]) {
+    const version = templeVersion(templeProbes?.[side], side);
+    const release =
+      catalog.find(
+        (candidate) =>
+          officialChannel(candidate) && candidate.version === version,
+      ) ?? null;
+    routes[side] = {
+      side,
+      version,
+      release,
+      omissionReason: release
+        ? null
+        : `The archive does not contain an official G2 ${version} recovery bundle.`,
+    };
   }
-
-  const release = catalog.find(
-    (candidate) =>
-      officialChannel(candidate) && candidate.version === leftVersion,
-  );
-  if (!release) {
-    throw new Error(
-      `The archive does not contain an official G2 ${leftVersion} recovery bundle.`,
-    );
+  const releases = [];
+  for (const side of ["left", "right"]) {
+    const release = routes[side].release;
+    if (release && !releases.some((seen) => seen.sha256 === release.sha256)) {
+      releases.push(release);
+    }
   }
-  return release;
+  return {
+    pairMatched: routes.left.version === routes.right.version,
+    left: routes.left,
+    right: routes.right,
+    releases,
+  };
 }
 
 export async function validateGlassesRecoveryBundle(input, release) {
@@ -88,24 +108,76 @@ function serializeTempleProbe(probe, side) {
   };
 }
 
+function serializeRecoveryBundle(release, bytes, coveredSides) {
+  const bundleBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  return {
+    coveredSides,
+    version: release.version,
+    channel: release.channel ?? "official",
+    trust: release.trust ?? null,
+    fileName: release.fileName,
+    size: bundleBytes.length,
+    sha256: release.sha256,
+    archivedFrom: release.archivedFrom ?? null,
+    components: (release.components ?? [])
+      .filter((component) => component.typeId !== 6)
+      .map(({ name, typeId, size, crc32c, sha256 }) => ({
+        name,
+        typeId,
+        size,
+        crc32c,
+        sha256,
+      })),
+    bytesBase64: bytesToBase64(bundleBytes),
+  };
+}
+
 export function buildG2SystemBackupArtifact({
   caseBackup,
   report,
   templeProbes,
-  recoveryRelease,
-  recoveryBundleBytes,
+  recoveryResolution,
+  recoveryBundles,
   createdAt = new Date().toISOString(),
 }) {
   const left = serializeTempleProbe(templeProbes?.left, "left");
   const right = serializeTempleProbe(templeProbes?.right, "right");
-  if (left.firmwareVersion !== right.firmwareVersion) {
-    throw new Error("A combined backup requires matching left and right firmware.");
+  // A split pair is backed up, not refused: both live snapshots are captured
+  // and each route's matching archived bundle (or an explicit omission) is
+  // recorded per side.
+  const resolution =
+    recoveryResolution ??
+    (() => {
+      throw new Error("A combined backup requires a recovery resolution.");
+    })();
+  const bundlesBySha = new Map(
+    (recoveryBundles ?? []).map(({ release, bytes }) => [release.sha256, { release, bytes }]),
+  );
+  const serializedBundles = [];
+  const omissions = [];
+  for (const side of ["left", "right"]) {
+    const route = resolution[side];
+    if (!route.release) {
+      omissions.push({ side, version: route.version, reason: route.omissionReason });
+      continue;
+    }
+    const fetched = bundlesBySha.get(route.release.sha256);
+    if (!fetched) {
+      throw new Error(
+        `The validated ${route.version} recovery bundle bytes for the ${side} temple were not provided.`,
+      );
+    }
+    const existing = serializedBundles.find(
+      (bundle) => bundle.sha256 === route.release.sha256,
+    );
+    if (existing) {
+      if (!existing.coveredSides.includes(side)) existing.coveredSides.push(side);
+      continue;
+    }
+    serializedBundles.push(
+      serializeRecoveryBundle(fetched.release, fetched.bytes, [side]),
+    );
   }
-
-  const recoveryBytes =
-    recoveryBundleBytes instanceof Uint8Array
-      ? recoveryBundleBytes
-      : new Uint8Array(recoveryBundleBytes);
 
   return {
     schemaVersion: SYSTEM_BACKUP_SCHEMA_VERSION,
@@ -134,10 +206,11 @@ export function buildG2SystemBackupArtifact({
       activePhysicalBank: report?.options?.activePhysicalBank ?? null,
     },
     smartGlasses: {
-      backupType: "official-recovery-bundle-with-live-temple-snapshots",
+      backupType: "per-route-recovery-bundles-with-live-temple-snapshots",
       installedMemoryReadback: false,
       limitation:
-        "The G2 wired protocol cannot read installed Apollo MRAM, bootloader, pairing keys, calibration, or INFO0/INFOC. The embedded bundle is a validated official recovery image matching the reported firmware version, not a dump of installed temple memory.",
+        "The G2 wired protocol cannot read installed Apollo MRAM, bootloader, pairing keys, calibration, or INFO0/INFOC. Each embedded bundle is a validated archived recovery image matching that route's reported firmware version, not a dump of installed temple memory.",
+      pairMatched: resolution.pairMatched,
       left,
       right,
       telemetryAtAnalysis: report?.console?.telemetry
@@ -146,23 +219,43 @@ export function buildG2SystemBackupArtifact({
             rightPresent: report.console.telemetry.rightPresent,
           }
         : null,
-      recoveryBundle: {
-        version: recoveryRelease.version,
-        fileName: recoveryRelease.fileName,
-        size: recoveryBytes.length,
-        sha256: recoveryRelease.sha256,
-        archivedFrom: recoveryRelease.archivedFrom ?? null,
-        components: (recoveryRelease.components ?? [])
-          .filter((component) => component.typeId !== 6)
-          .map(({ name, typeId, size, crc32c, sha256 }) => ({
-            name,
-            typeId,
-            size,
-            crc32c,
-            sha256,
-          })),
-        bytesBase64: bytesToBase64(recoveryBytes),
-      },
+      recoveryBundles: serializedBundles,
+      recoveryBundleOmissions: omissions,
     },
   };
+}
+
+// Validates a previously saved case-only backup for reuse, so a retry in a
+// new process does not pay the multi-minute 512 KiB flash re-read to satisfy
+// the flash gate. Fail-closed: the recorded digests are recomputed from the
+// embedded bytes, and the backup must name the same case the fresh analysis
+// selected — a hash-valid backup of a different unit is still refused.
+export async function validateSavedCaseBackup(artifact, { expectedSerial }) {
+  if (!artifact || typeof artifact !== "object") {
+    throw new Error("The saved backup is not a JSON object.");
+  }
+  const flash = base64ToBytes(artifact.flashBase64 ?? "");
+  const optionBytes = base64ToBytes(artifact.optionBytesBase64 ?? "");
+  if (flash.length !== 512 * 1024 || optionBytes.length !== 128) {
+    throw new Error(
+      "The saved backup does not contain a complete 512 KiB flash image and 128-byte option block.",
+    );
+  }
+  const flashSha256 = await sha256Hex(flash);
+  const optionSha256 = await sha256Hex(optionBytes);
+  if (
+    flashSha256 !== artifact.flashSha256 ||
+    optionSha256 !== artifact.optionSha256
+  ) {
+    throw new Error(
+      "The saved backup's recorded digests do not match its embedded bytes.",
+    );
+  }
+  const serial = artifact.serialNumber ?? null;
+  if (!expectedSerial || !serial || serial !== expectedSerial) {
+    throw new Error(
+      `The saved backup names case serial ${serial ?? "unknown"}, but the selected case is ${expectedSerial ?? "unknown"}. Save a fresh backup for this case.`,
+    );
+  }
+  return { flashSha256, optionSha256, serialNumber: serial };
 }

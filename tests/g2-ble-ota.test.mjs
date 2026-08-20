@@ -3,8 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  G2_BLE_BEGIN_ATTEMPTS,
   G2_BLE_BLOCK_BYTES,
   G2_BLE_LOSS_RECONNECT_DELAY_MS,
+  G2_BLE_POST_UPDATE_RECONNECT_ATTEMPTS,
+  G2_BLE_POST_UPDATE_RECONNECT_INTERVAL_MS,
   G2BleOtaError,
   G2BleOtaSession,
   assertPinnedG2BleBundle,
@@ -570,6 +573,116 @@ test("an initially unreachable selected temple gets bounded reconnect attempts",
   assert.match(logs.at(-1).message, /became reachable again/);
 });
 
+test("the post-update reconnect budget outlasts the temple's firmware apply", () => {
+  const session = new G2BleOtaSession(
+    { name: "Even G2_32_R_693CCB", gatt: {} },
+    { side: "right" },
+  );
+  assert.equal(G2_BLE_POST_UPDATE_RECONNECT_INTERVAL_MS, 5000);
+  assert.equal(G2_BLE_POST_UPDATE_RECONNECT_ATTEMPTS, 24);
+  assert.equal(G2_BLE_BEGIN_ATTEMPTS, 3);
+  assert.equal(session.postUpdateReconnectIntervalMs, 5000);
+  assert.equal(session.postUpdateReconnectAttempts, 24);
+  assert.equal(session.beginAttempts, 3);
+  // The mid-transfer blip budget is deliberately unchanged: a connection that
+  // drops during transfer should still resolve or fail quickly.
+  assert.equal(session.reconnectAttempts, 8);
+  assert.equal(session.reconnectIntervalMs, 2500);
+  // END 8 (UPDATING) applies a multi-megabyte staged image; the settle pause
+  // plus the reconnect ladder must cover at least two minutes of silence.
+  assert.ok(
+    session.rebootSettleMs +
+      (session.postUpdateReconnectAttempts - 1) *
+        session.postUpdateReconnectIntervalMs >=
+      120_000,
+  );
+});
+
+test("a silent BEGIN is retried on a rebuilt link instead of failing the side", async () => {
+  const logs = [];
+  let rebuilds = 0;
+  let heartbeatStarts = 0;
+  let disconnects = 0;
+  let sends = 0;
+  const session = new G2BleOtaSession(
+    { name: "Even G2_32_L_BEA504", gatt: { connected: true } },
+    { side: "left", log: (message, tone) => logs.push({ message, tone }) },
+  );
+  session.disconnect = async () => {
+    disconnects += 1;
+  };
+  session.connectForTransfer = async () => {
+    rebuilds += 1;
+  };
+  session.startHeartbeat = () => {
+    heartbeatStarts += 1;
+  };
+  session.sendControl = async (opcode) => {
+    assert.equal(opcode, 0x00);
+    sends += 1;
+    if (sends === 1) {
+      throw new G2BleOtaError("left: no Bluetooth OTA acknowledgement for opcode 0x00.", {
+        code: "ACK_TIMEOUT",
+        opcode: 0x00,
+      });
+    }
+    return 0;
+  };
+
+  assert.equal(await session.beginPackage(), 0);
+  assert.equal(sends, 2);
+  assert.equal(disconnects, 1);
+  assert.equal(rebuilds, 1);
+  assert.equal(heartbeatStarts, 1);
+  assert.match(logs[0].message, /BEGIN attempt 2\/3/);
+  assert.match(logs[0].message, /safe to resend/);
+});
+
+test("a BEGIN that stays silent is bounded and reports before any firmware moved", async () => {
+  const session = new G2BleOtaSession(
+    { name: "Even G2_32_L_BEA504", gatt: { connected: true } },
+    { side: "left", beginAttempts: 2 },
+  );
+  session.disconnect = async () => {};
+  session.connectForTransfer = async () => {};
+  session.startHeartbeat = () => {};
+  session.sendControl = async () => {
+    throw new G2BleOtaError("left: no Bluetooth OTA acknowledgement for opcode 0x00.", {
+      code: "ACK_TIMEOUT",
+      opcode: 0x00,
+    });
+  };
+
+  await assert.rejects(session.beginPackage(), (error) => {
+    assert.equal(error.code, "BEGIN_FAILED");
+    assert.equal(error.attempts, 2);
+    assert.equal(error.cause?.code, "ACK_TIMEOUT");
+    assert.match(error.message, /no firmware bytes were sent/);
+    return true;
+  });
+});
+
+test("a BEGIN connection loss still routes through the saved-endpoint recovery", async () => {
+  const contexts = [];
+  const session = new G2BleOtaSession(
+    { name: "Even G2_32_L_BEA504", gatt: { connected: false } },
+    { side: "left" },
+  );
+  session.sendControl = async () => {
+    throw Object.assign(
+      new Error("Bluetooth Device is no longer in range."),
+      { code: 19 },
+    );
+  };
+  session.reconnectAfterLoss = async (context) => {
+    contexts.push(context);
+    return { attempts: 1, beginStatus: 0 };
+  };
+
+  assert.equal(await session.beginPackage(), 0);
+  assert.deepEqual(contexts, ["the package BEGIN command"]);
+});
+
 test("a final END 8 reboot reconnects instead of surfacing the heartbeat disconnect", async () => {
   const target = {
     imageSha256: "a".repeat(64),
@@ -655,8 +768,8 @@ test("an explicit final END preserves the transfer when bounded reboot reconnect
     side: "right",
     log: (message, tone) => logs.push({ message, tone }),
     rebootSettleMs: 0,
-    reconnectIntervalMs: 0,
-    reconnectAttempts: 3,
+    postUpdateReconnectIntervalMs: 0,
+    postUpdateReconnectAttempts: 3,
   });
   session.writeTail = Promise.reject(
     new Error("Bluetooth Device is no longer in range."),
@@ -719,8 +832,8 @@ test("the final reboot reconnect is bounded and succeeds on the selected device 
   const session = new G2BleOtaSession(device, {
     side: "right",
     rebootSettleMs: 0,
-    reconnectIntervalMs: 0,
-    reconnectAttempts: 4,
+    postUpdateReconnectIntervalMs: 0,
+    postUpdateReconnectAttempts: 4,
   });
   session.connect = async () => {
     connectAttempts += 1;
@@ -751,8 +864,8 @@ test("a live final-END link is closed and freshly reconnected without replay", a
   const session = new G2BleOtaSession(device, {
     side: "right",
     rebootSettleMs: 0,
-    reconnectIntervalMs: 0,
-    reconnectAttempts: 3,
+    postUpdateReconnectIntervalMs: 0,
+    postUpdateReconnectAttempts: 3,
   });
   session.disconnect = async () => {
     disconnects += 1;

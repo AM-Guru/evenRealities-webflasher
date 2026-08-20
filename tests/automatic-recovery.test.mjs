@@ -1677,3 +1677,28 @@ test("automatic Update reuses the fresh matching preflight instead of resetting 
   assert.equal(result.action, "verify-only");
   assert.equal(result.result, readiness);
 });
+
+test("classifies a Case-transport probe failure as no temple evidence", () => {
+  const transportError = new Error(
+    "Timed out reading Go address ACK: received 0 of 1 bytes.",
+  );
+  transportError.caseTransportFailure = true;
+  const classified = classifyAutomaticTempleBootState({
+    present: true,
+    error: transportError,
+  });
+  assert.equal(classified.state, "case-transport-failure");
+  assert.equal(classified.applicationResponsive, null);
+
+  const healthy = classifyAutomaticTempleBootState({
+    present: true,
+    probe: versionProbe("2.2.8.4"),
+  });
+  const plan = minimumAutomaticRecoveryPlan({
+    left: classified,
+    right: healthy,
+  });
+  assert.equal(plan.action, "retry-analysis");
+  assert.equal(plan.executable, false);
+  assert.equal(plan.firmwareWriteRequired, false);
+});

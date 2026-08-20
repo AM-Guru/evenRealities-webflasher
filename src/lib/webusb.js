@@ -200,9 +200,33 @@ class UsbBulkReadableSource {
         controller.enqueue(bytes.slice());
       }
     } catch (error) {
-      if (!this.port.closing && this.port.device.opened) {
-        controller.error(error);
+      if (this.port.closing) {
+        // Deliberate teardown: end the stream so the transport pump observes
+        // "done" instead of re-invoking pull against a closed device.
+        try {
+          controller.close();
+        } catch {
+          // A prior pull may already have closed or errored the stream.
+        }
+        return;
       }
+      if (!this.port.device.opened) {
+        // The device vanished (unplug, reset) outside any deliberate close.
+        // Wrap the raw disconnect exception: the transport pump treats
+        // NetworkError/AbortError as ordinary teardown noise, so the raw
+        // DOMException would be silently discarded and every later read
+        // would degrade into a wall-clock timeout with the cause lost.
+        controller.error(
+          Object.assign(
+            new Error(
+              `The G2 Case USB device is no longer open (${error?.message ?? String(error)}). It was disconnected or reset outside a deliberate close.`,
+            ),
+            { cause: error },
+          ),
+        );
+        return;
+      }
+      controller.error(error);
     }
   }
 
