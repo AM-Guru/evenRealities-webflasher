@@ -326,13 +326,13 @@ function archiveKeyFor(release) {
   if (release.channel === "custom") {
     if (!/^[a-f0-9]{64}$/.test(release.sha256 ?? "")) {
       throw new Error(
-        `Reviewed CFW ${release.version} needs a pinned SHA-256 before it can be archived`,
+        `Custom firmware ${release.version} needs a pinned SHA-256 before it can be archived`,
       );
     }
     const contentAddressedKey = `${release.version}-${release.sha256.slice(0, 12)}`;
     if (release.archiveKey && release.archiveKey !== contentAddressedKey) {
       throw new Error(
-        `Reviewed CFW ${release.version} archive key must match its pinned SHA-256`,
+        `Custom firmware ${release.version} archive key must match its pinned SHA-256`,
       );
     }
     return contentAddressedKey;
@@ -349,26 +349,26 @@ function applyReviewedPatchSet(stock, patchSet) {
       operation.old.length !== oldBytes.length * 2 ||
       operation.new.length !== newBytes.length * 2
     ) {
-      throw new Error(`CFW patch operation ${index + 1} contains malformed hex`);
+      throw new Error(`Patch operation ${index + 1} contains malformed hex`);
     }
     if (oldBytes.length === 0) {
       if (operation.offset !== result.length) {
         throw new Error(
-          `CFW append operation ${index + 1} targets ${operation.offset}, expected ${result.length}`,
+          `Patch append operation ${index + 1} targets ${operation.offset}, expected ${result.length}`,
         );
       }
       result = Buffer.concat([result, newBytes]);
       continue;
     }
     if (oldBytes.length !== newBytes.length) {
-      throw new Error(`CFW patch operation ${index + 1} changes an in-place length`);
+      throw new Error(`Patch operation ${index + 1} changes an in-place length`);
     }
     const found = result.subarray(
       operation.offset,
       operation.offset + oldBytes.length,
     );
     if (!found.equals(oldBytes)) {
-      throw new Error(`CFW patch operation ${index + 1} did not match the stock bytes`);
+      throw new Error(`Patch operation ${index + 1} did not match the stock bytes`);
     }
     newBytes.copy(result, operation.offset);
   }
@@ -424,6 +424,9 @@ async function acquireRelease(release, sourceUrl, fallbackRoots) {
 }
 
 async function saveRelease(root, release, fallbackRoots) {
+  if ((release.channel ?? "official") !== "official") {
+    throw new Error("The EvenRealities archive accepts official firmware only");
+  }
   // Reviewed firmware can legitimately be rebuilt without changing the version
   // reported by the glasses. Content-addressing it keeps every published URL
   // immutable and prevents a later deployment from colliding with older bytes.
@@ -453,7 +456,7 @@ async function saveRelease(root, release, fallbackRoots) {
     ],
   };
   process.stdout.write(
-    `Downloading ${release.channel === "custom" ? "reviewed CFW" : "official G2"} ${release.version}… `,
+    `Downloading official G2 ${release.version}… `,
   );
   const { bytes, archivedFrom } = await acquireRelease(
     acquisitionRelease,
@@ -532,7 +535,7 @@ async function saveRelease(root, release, fallbackRoots) {
         candidate.version === release.baseVersion &&
         (candidate.channel ?? "official") === "official",
     );
-    if (!baseRelease) throw new Error("The reviewed CFW stock base is not in the archive");
+    if (!baseRelease) throw new Error("The custom firmware stock base is not in the archive");
     if (
       patchSet.base_sha256 !== release.baseSha256 ||
       patchSet.output_sha256 !== release.sha256 ||
@@ -577,22 +580,22 @@ async function saveRelease(root, release, fallbackRoots) {
         JSON.stringify(patchSet.source_provenance?.direct_framebuffer_commits) !==
           JSON.stringify(release.directFramebufferCommits))
     ) {
-      throw new Error("The reviewed CFW patch recipe does not match its pinned trust boundary");
+      throw new Error("The custom firmware patch recipe does not match its pinned trust boundary");
     }
     const baseFile = baseRelease.fileName ?? `${baseRelease.hash}.bin`;
     const stockBytes = await readFile(
       path.join(root, release.baseVersion, baseFile),
     );
     if (digest("sha256", stockBytes) !== release.baseSha256) {
-      throw new Error("The archived CFW stock base does not match its pinned SHA-256");
+      throw new Error("The archived custom firmware stock base does not match its pinned SHA-256");
     }
-    const rebuiltCFW = applyReviewedPatchSet(stockBytes, patchSet);
+    const rebuiltCustomFirmware = applyReviewedPatchSet(stockBytes, patchSet);
     if (
-      digest("sha256", rebuiltCFW) !== release.sha256 ||
-      !rebuiltCFW.equals(bytes)
+      digest("sha256", rebuiltCustomFirmware) !== release.sha256 ||
+      !rebuiltCustomFirmware.equals(bytes)
     ) {
       throw new Error(
-        "The reviewed patch recipe does not reproduce the archived CFW byte-for-byte",
+        "The reviewed patch recipe does not reproduce the archived custom firmware byte-for-byte",
       );
     }
     patchFile = release.patchFileName;

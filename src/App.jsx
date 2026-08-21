@@ -3387,8 +3387,6 @@ function App() {
         installMode: automaticInstallMode,
         targetFirmware,
         installedProvenance,
-        differenceSourceFirmware: null,
-        differencePlan: null,
         observedTempleVersions,
       });
 
@@ -3417,7 +3415,6 @@ function App() {
       const summary = summarizeAutomaticApplyTransfer({
         plan,
         targetFirmware,
-        differencePlan: null,
         comparisonSourceFirmwareByRoute,
       });
       setAutomaticTransferPreview(summary);
@@ -3694,8 +3691,6 @@ function App() {
             installMode: automaticInstallMode,
             targetFirmware,
             installedProvenance,
-            differenceSourceFirmware: null,
-            differencePlan: null,
             initialTempleVersions: initialVersions,
             observedTempleVersions,
             verifiedTempleReadiness: templeReadiness,
@@ -3732,28 +3727,6 @@ function App() {
                   `${automaticInstallMode === "update" ? "Updating" : "Restoring"} both temples automatically…`,
                 );
               }
-            },
-            onRecovery: (recovery) => {
-              if (
-                recovery.trigger !== "source-preflight-mismatch"
-              ) {
-                addLog(
-                  `Differential transfer reached FINISH, but ${recovery.failedRoutes.join(" + ")} did not return the expected target liveness. Case-route cleanup and the prior reset proof are complete; Automatic Update will require one fresh bilateral recovery reset before switching to the complete pinned target main.`,
-                  "warn",
-                );
-              } else {
-                addLog(
-                  `Differential preflight observed ${recovery.observedVersion}/hardware 5 before START. No firmware bytes were accepted and cleanup is verified; Automatic Update will require one fresh bilateral recovery reset before switching to the complete pinned target main.`,
-                  "warn",
-                );
-              }
-              setSessionProgress(
-                0.16,
-                "Resetting both temples before complete-image fallback",
-              );
-              setAutomaticStatus(
-                "Differential happy path failed safely; resetting before the complete pinned target main…",
-              );
             },
           });
 
@@ -3792,7 +3765,7 @@ function App() {
             `${automaticInstallMode === "update" ? "Update" : "Restore"} complete · both temples reset and verified.`,
           );
           addLog(
-            `Automatic ${automaticInstallMode} completed on right + left${execution.initialPlan ? " after safe differential-to-complete fallback" : ""} with FINISH, route restoration, final DEB0 reset, contacts, and application liveness verified.`,
+            `Automatic ${automaticInstallMode} completed on right + left with FINISH, route restoration, final DEB0 reset, contacts, and application liveness verified.`,
             "success",
           );
           return execution;

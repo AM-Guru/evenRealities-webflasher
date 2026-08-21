@@ -3,9 +3,9 @@
 // The compiled-in TEMPLE_FLASH_TARGETS allowlist is the writer's trust root.
 // The fetched catalog is only the menu offered on top of it. The two are
 // published by different paths, so they can drift — and on 2026-07-28 they did:
-// production served a catalog whose newest CFW was the legacy 2.2.6.10 build
-// while the running bundle already trusted reviewed CFW 2.2.6.11. Nothing on
-// screen said so, and selecting "the CFW" silently meant the older image.
+// production served a stale catalog while the running bundle already trusted a
+// newer release. Nothing on screen said so, and selection silently meant the
+// older image.
 //
 // The signal that matters is one-directional. A pinned image missing because it
 // is *older* than everything on offer has simply been retired from the library
@@ -15,7 +15,7 @@
 // puts an unintended build on a temple.
 
 // Leading dotted-numeric portion of a version, so catalog values that carry a
-// channel suffix ("2.2.6.10-cfw") still compare against plain ones.
+// channel suffix still compare against plain ones.
 export function parseFirmwareVersion(value) {
   const match = /^(\d+(?:\.\d+)*)/.exec(String(value ?? "").trim());
   if (!match) return null;

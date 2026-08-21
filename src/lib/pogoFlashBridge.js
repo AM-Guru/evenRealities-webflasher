@@ -37,13 +37,6 @@ export const POGO_FLASH_PROOF_ADDRESS = 0x20011b00;
 export const POGO_FLASH_PROOF = new Uint8Array([
   0x47, 0x46, 0x52, 0x50, 0xde, 0xc0, 0xde, 0xc0,
 ]);
-export const REVIEWED_CFW_IMAGE_SHA256 =
-  "105032302d02ccf943b785070cf15877a918c120b7ca1332bb6261f70eb6d683";
-export const REVIEWED_CFW_MAIN_SHA256 =
-  "2d82addd4c9916781b50f7be377645b797f10856a460bc5190f3172e7161614e";
-export const REVIEWED_CFW_MAIN_BYTES = 3543523;
-export const REVIEWED_CFW_BASE_VERSION = "2.2.6.10";
-export const REVIEWED_CFW_VERSION = "2.2.6.11";
 export const REVIEWED_CASE_VERSION = "1.2.57";
 export const POGO_FLASH_STATUS = Object.freeze({
   0: "ok",
@@ -126,7 +119,7 @@ export const YHM_SETUP_NON_IDLE_RECOVERY = Object.freeze({
   otaMutationAttempted: false,
   wiredRetryPolicy: "bounded_cleanup_deb0_then_fresh_setup",
   recoveryRecommendation:
-    "Do not bypass the YHM allowlist. After exact retained proof that setup stopped before route selection or OTA bytes, clear the volatile record, return the Case to firmware 1.2.57, issue a bounded bilateral DEB0 reset/liveness check, and retry only from a fresh setup. Retain the existing Stock/CFW provenance because no OTA mutation began.",
+    "Do not bypass the YHM allowlist. After exact retained proof that setup stopped before route selection or OTA bytes, clear the volatile record, return the Case to firmware 1.2.57, issue a bounded bilateral DEB0 reset/liveness check, and retry only from a fresh setup. Retain the existing official-image provenance because no OTA mutation began.",
 });
 
 export function classifyPogoFlashRecoveryBoundary(
@@ -639,20 +632,4 @@ export async function assertPinnedTempleFlashCandidate(firmware) {
     );
   }
   return { mainComponent: firmware.mainComponent, target };
-}
-
-/** @deprecated Retained so the reviewed-CFW pin stays independently asserted. */
-export async function assertReviewedCfwFlashCandidate(firmware) {
-  const { mainComponent } = await assertPinnedTempleFlashCandidate(firmware);
-  if (
-    firmware.fileSha256 !== REVIEWED_CFW_IMAGE_SHA256 ||
-    mainComponent.payload.length !== REVIEWED_CFW_MAIN_BYTES ||
-    mainComponent.payloadSha256 !== REVIEWED_CFW_MAIN_SHA256 ||
-    firmware.g2Version !== REVIEWED_CFW_VERSION
-  ) {
-    throw new PogoFlashSafetyError(
-      "Temple flashing accepts only the exact reviewed 2.2.6.11 CFW Apollo-main component.",
-    );
-  }
-  return mainComponent;
 }

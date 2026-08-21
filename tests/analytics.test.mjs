@@ -235,11 +235,7 @@ test("treats older responsive hardware-5 temples as complete-main compatible", (
   );
   assert.equal(
     analytics.smartGlasses.left.reviewedWriterCompatible,
-    false,
-  );
-  assert.equal(
-    analytics.smartGlasses.left.differentialSourceCompatible,
-    false,
+    true,
   );
   assert.equal(
     analytics.smartGlasses.recoveryAssessment.bothRoutesReady,

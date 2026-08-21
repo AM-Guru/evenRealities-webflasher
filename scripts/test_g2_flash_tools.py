@@ -20,7 +20,6 @@ from g2_case_pogo_flasher import (  # noqa: E402
     BRIDGE_SHA256,
     FINAL_RESET_COMMAND,
     PACING_PROFILES,
-    REVIEWED_CFW_SHA256,
     REVIEWED_OFFICIAL_MAIN_BYTES,
     REVIEWED_OFFICIAL_MAIN_SHA256,
     REVIEWED_OFFICIAL_SHA256,
@@ -259,7 +258,7 @@ class G2FlashToolTests(unittest.TestCase):
             self.assertFalse(path.with_suffix(".json.partial").exists())
 
     def test_official_restore_command_is_distinct_and_available(self) -> None:
-        self.assertNotEqual(REVIEWED_OFFICIAL_SHA256, REVIEWED_CFW_SHA256)
+        self.assertEqual(len(REVIEWED_OFFICIAL_SHA256), 64)
         self.assertEqual(REVIEWED_OFFICIAL_MAIN_BYTES, 3_523_396)
         self.assertEqual(len(REVIEWED_OFFICIAL_MAIN_SHA256), 64)
         args = build_parser().parse_args([

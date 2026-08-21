@@ -1,5 +1,4 @@
 import { decodeOptionBytes } from "./firmware.js";
-import { describeByteDifferences } from "./differential.js";
 
 export const DEFAULT_INTERFACE_MODE = "easy";
 export const DEFAULT_AUTOMATIC_INSTALL_MODE = "update";
@@ -7,10 +6,31 @@ export const DEFAULT_AUTOMATIC_CASE_UPDATE = true;
 export const AUTOMATIC_INSTALL_MODES = Object.freeze(["update", "restore"]);
 
 const ROUTES = Object.freeze(["right", "left"]);
-const REVIEWED_STOCK_CFW_PAIRS = Object.freeze([
-  Object.freeze(["2.2.6.10", "2.2.6.11", "2.2.6.12"]),
-]);
-const MAIN_COMPONENT = "ota/s200_firmware_ota.bin";
+function describeByteDifferences(sourceInput, targetInput) {
+  const source = sourceInput instanceof Uint8Array
+    ? sourceInput
+    : new Uint8Array(sourceInput ?? 0);
+  const target = targetInput instanceof Uint8Array
+    ? targetInput
+    : new Uint8Array(targetInput ?? 0);
+  const comparedBytes = Math.max(source.length, target.length);
+  let changedBytes = 0;
+  for (let offset = 0; offset < comparedBytes; offset += 1) {
+    if (
+      offset >= source.length ||
+      offset >= target.length ||
+      source[offset] !== target[offset]
+    ) {
+      changedBytes += 1;
+    }
+  }
+  return {
+    sourceBytes: source.length,
+    targetBytes: target.length,
+    comparedBytes,
+    changedBytes,
+  };
+}
 
 function automaticProbeIdentity(probe) {
   const decoded = probe?.decoded;
@@ -860,47 +880,6 @@ export function describeAutomaticApplyFailure(error) {
   };
 }
 
-function knownRouteProofsBelongToPair(
-  provenance,
-  sourceSha256,
-  targetSha256,
-) {
-  const pair = new Set([sourceSha256, targetSha256].map((value) =>
-    String(value ?? "").toLowerCase(),
-  ));
-  return ROUTES.every((route) => {
-    const known = provenance?.[route]?.imageSha256?.toLowerCase();
-    return !known || pair.has(known);
-  });
-}
-
-function supportsLiveCompatiblePairProof(differencePlan) {
-  const source = differencePlan?.source;
-  const target = differencePlan?.target;
-  const wireTransfer = differencePlan?.wireTransfer;
-  const verification = differencePlan?.verification;
-  return Boolean(
-    differencePlan?.executable &&
-      differencePlan?.changedMainOnly === true &&
-      new Set([source?.version, target?.version]).size === 2 &&
-      REVIEWED_STOCK_CFW_PAIRS.some((pair) =>
-        [source?.version, target?.version].every((version) => pair.includes(version)),
-      ) &&
-      wireTransfer?.component === MAIN_COMPONENT &&
-      Number.isInteger(wireTransfer?.bytes) &&
-      wireTransfer.bytes > 0 &&
-      wireTransfer?.sparseByteRangesSupported === false &&
-      verification?.targetBundleSha256?.toLowerCase() ===
-        target?.imageSha256?.toLowerCase() &&
-      verification?.targetMainSha256?.toLowerCase() ===
-        target?.mainSha256?.toLowerCase() &&
-      verification?.targetMainBytes === wireTransfer.bytes &&
-      verification?.finishAcknowledgementRequired === true &&
-      verification?.postResetLivenessRequired === true &&
-      verification?.finalDualTempleResetRequired === true,
-  );
-}
-
 function observedTempleIdentity(observedTempleVersions, route) {
   const observed = observedTempleVersions?.[route];
   return {
@@ -1035,168 +1014,10 @@ function completeAutomaticUpdatePlan(targetSha256, reason, route = "both") {
   };
 }
 
-function completeResetLivenessProof(audit) {
-  const resetVersions = audit?.finalResetAndLiveness?.versions;
-  return Boolean(
-    audit?.finalResetAndLiveness?.resetConfirmed === true &&
-      audit.finalResetAndLiveness.caseFirmware === "1.2.57" &&
-      ROUTES.every(
-        (route) =>
-          resetVersions?.[route]?.firmware &&
-          resetVersions[route].hardware === 5 &&
-          resetVersions[route].yhmRestoreVerified === true,
-      ),
-  );
-}
-
-function differentialFallbackDetails(error, plan) {
-  const audit = error?.audit;
-  const routeResults = audit?.routeResults;
-  const requiredSourceVersion =
-    audit?.sourceValidation?.requiredLiveFirmware;
-  if (
-    plan?.flashMode !== "differences" ||
-    !plan?.sourceVersion ||
-    requiredSourceVersion !== plan.sourceVersion ||
-    audit?.outcome !== "failed_or_uncertain" ||
-    audit?.flashMode !== "differences" ||
-    !Array.isArray(audit?.routes) ||
-    audit.routes.length !== ROUTES.length ||
-    !ROUTES.every((route) => audit.routes.includes(route)) ||
-    !Array.isArray(routeResults) ||
-    routeResults.length === 0 ||
-    !completeResetLivenessProof(audit)
-  ) {
-    return null;
-  }
-
-  const zeroWritePreflightMismatch =
-    [
-      audit?.routeOrderSetupStops,
-      audit?.supersededSuccessfulRouteResults,
-      audit?.routeComponentRestartAttempts,
-      audit?.routeComponentRestartResets,
-      audit?.persistentDataRejectionStops,
-      audit?.routeSetupResetStops,
-      audit?.routeSetupResetResults,
-    ].every((history) => Array.isArray(history) && history.length === 0) &&
-    routeResults.length === 1 &&
-    routeResults.every(
-      (result) =>
-        ROUTES.includes(result?.route) &&
-        result?.outcome === "failed_or_uncertain" &&
-        result?.failureStage === "PREFLIGHT" &&
-        result?.otaMutationAttempted === false &&
-        result?.acceptedFirmwareBytes === 0 &&
-        result?.preflightVersion?.hardware === 5 &&
-        result?.preflightVersion?.firmware &&
-        result.preflightVersion.firmware !== requiredSourceVersion &&
-        result?.caseRestoreVerified === true &&
-        result?.caseApplicationVersion === "1.2.57" &&
-        result?.retainedResult?.acceptedSize === 0 &&
-        result?.retainedResult?.baselineMask === 0x3ff &&
-        result?.retainedResult?.selectedMask === 0x3ff &&
-        result?.retainedResult?.restoredMask === 0x3ff &&
-        result?.retainedResult?.templeUartErrors === 0,
-    );
-  if (zeroWritePreflightMismatch) {
-    const observedVersion =
-      routeResults[0].preflightVersion.firmware;
-    return {
-      kind: "differential-to-complete",
-      trigger: "source-preflight-mismatch",
-      observedVersion,
-      observedVersions: Object.fromEntries(
-        ROUTES.map((route) => [
-          route,
-          audit.finalResetAndLiveness.versions[route].firmware,
-        ]),
-      ),
-      failedRoutes: [routeResults[0].route],
-      reason:
-        `Just-in-time preflight reported ${observedVersion}/hardware 5 instead of the reviewed differential source.`,
-    };
-  }
-
-  const targetBytes =
-    audit?.differencePlan?.verification?.targetMainBytes ??
-    audit?.differencePlan?.wireTransfer?.bytes;
-  const failedPostflightRoutes = routeResults
-    .filter(
-      (result) =>
-        result?.outcome === "failed_or_uncertain" &&
-        result?.failureStage === "POSTFLIGHT",
-    )
-    .map((result) => result.route);
-  const targetVersion = audit?.differencePlan?.target?.version;
-  const failedFinalLivenessRoutes = targetVersion
-    ? ROUTES.filter(
-        (route) =>
-          audit.finalResetAndLiveness.versions[route].firmware !==
-          targetVersion,
-      )
-    : [];
-  const bootFailureRoutes = [
-    ...new Set([
-      ...failedPostflightRoutes,
-      ...failedFinalLivenessRoutes,
-    ]),
-  ];
-  const safeCompletedTransfers = Boolean(
-    Number.isInteger(targetBytes) &&
-      targetBytes > 0 &&
-      bootFailureRoutes.length > 0 &&
-      routeResults.every(
-        (result) =>
-          ROUTES.includes(result?.route) &&
-          ["success", "failed_or_uncertain"].includes(result?.outcome) &&
-          (result.outcome === "success" ||
-            result.failureStage === "POSTFLIGHT") &&
-          result?.otaMutationAttempted === true &&
-          result?.transfer?.finishAckReceived === true &&
-          result.transfer.payloadBytesSent === targetBytes &&
-          result?.acceptedFirmwareBytes === targetBytes &&
-          result?.caseRestoreVerified === true &&
-          result?.caseApplicationVersion === "1.2.57" &&
-          result?.retainedResult?.acceptedSize === targetBytes &&
-          result?.retainedResult?.baselineMask === 0x3ff &&
-          result?.retainedResult?.selectedMask === 0x3ff &&
-          result?.retainedResult?.restoredMask === 0x3ff &&
-          result?.retainedResult?.templeUartErrors === 0,
-      ),
-  );
-  if (!safeCompletedTransfers) return null;
-
-  const observedVersions = Object.fromEntries(
-    ROUTES.map((route) => [
-      route,
-      audit.finalResetAndLiveness.versions[route].firmware,
-    ]),
-  );
-  return {
-    kind: "differential-to-complete",
-    trigger:
-      failedPostflightRoutes.length > 0
-        ? "postflight-boot-liveness-failure"
-        : "final-boot-liveness-failure",
-    observedVersion: null,
-    observedVersions,
-    failedRoutes: bootFailureRoutes,
-    reason:
-      `The differential target was accepted, but ${bootFailureRoutes.join(" + ")} did not return the expected target version during boot/liveness verification.`,
-  };
-}
-
-export function canFallbackDifferentialToComplete(error, plan) {
-  return Boolean(differentialFallbackDetails(error, plan));
-}
-
 export function resolveAutomaticApplyPlan({
   installMode = DEFAULT_AUTOMATIC_INSTALL_MODE,
   targetFirmware,
   installedProvenance,
-  differenceSourceFirmware,
-  differencePlan,
   observedTempleVersions,
 }) {
   if (!AUTOMATIC_INSTALL_MODES.includes(installMode)) {
@@ -1215,7 +1036,7 @@ export function resolveAutomaticApplyPlan({
     return {
       executable: false,
       reason:
-        "Choose an exact, hash-pinned Stock or reviewed CFW Smart Glasses bundle.",
+        "Choose an exact, hash-pinned official Smart Glasses bundle.",
     };
   }
 
@@ -1305,90 +1126,17 @@ export function resolveAutomaticApplyPlan({
         : `The ${targetProvenRoutes[0]} temple already returns the selected target version in a fresh hardware-5 Application reply; `
       : "";
 
-  const sourceSha256 = differenceSourceFirmware?.fileSha256?.toLowerCase();
-  if (
-    !differencePlan?.executable ||
-    !sourceSha256 ||
-    differencePlan.source?.imageSha256?.toLowerCase() !== sourceSha256 ||
-    differencePlan.target?.imageSha256?.toLowerCase() !== targetSha256
-  ) {
-    return completeAutomaticUpdatePlan(
-      targetSha256,
-      `${preservedRoutePrefix}the installed firmware on ${routeDescription} is not the exact reviewed differential source; write the complete pinned target Apollo main on ${routeDescription}.`,
-      routeSelection,
-    );
-  }
-  const sourceVersion = differencePlan.source?.version;
-  const observedSourceCompatible = routesToUpdate.every(
-    (route) =>
-      observedIdentities[route].firmwareVersion === sourceVersion &&
-      observedIdentities[route].hardwareRevision === 5,
-  );
-  const observedSourceContradiction = routesToUpdate.some((route) => {
-    const observed = observedIdentities[route];
-    return Boolean(
-      (observed.firmwareVersion &&
-        observed.firmwareVersion !== sourceVersion) ||
-        (observed.hardwareRevision != null &&
-          observed.hardwareRevision !== 5),
-    );
-  });
-  if (
-    !knownRouteProofsBelongToPair(
-      installedProvenance,
-      sourceSha256,
-      targetSha256,
-    )
-  ) {
-    return completeAutomaticUpdatePlan(
-      targetSha256,
-      `${preservedRoutePrefix}saved proof identifies firmware outside the exact reviewed Stock ↔ CFW pair; write the complete pinned target Apollo main on ${routeDescription}.`,
-      routeSelection,
-    );
-  }
-
-  const exactSourceProven = routesToUpdate.every(
-    (route) =>
-      installedProvenance?.[route]?.imageSha256?.toLowerCase() === sourceSha256,
-  );
-  if (
-    observedSourceContradiction ||
-    !supportsLiveCompatiblePairProof(differencePlan) ||
-    (!exactSourceProven && !observedSourceCompatible)
-  ) {
-    const observed = routesToUpdate
-      .map((route) => observedIdentities[route].firmwareVersion)
-      .filter(Boolean);
-    return completeAutomaticUpdatePlan(
-      targetSha256,
-      observedSourceContradiction
-        ? `${preservedRoutePrefix}observed Smart Glasses firmware ${[...new Set(observed)].join(" / ")} on ${routeDescription} is outside the exact ${sourceVersion} differential source; write the complete pinned target Apollo main on ${routeDescription}.`
-        : `${preservedRoutePrefix}no exact Stock ↔ CFW source proof is available for ${routeDescription}; write the complete pinned target Apollo main on ${routeDescription}.`,
-      routeSelection,
-    );
-  }
-
-  return {
-    executable: true,
-    action: "flash",
-    route: routeSelection,
-    flashMode: "differences",
-    sourceProofMode: exactSourceProven
-      ? "verified-source-audits"
-      : "live-compatible-pair-preflight",
-    sourceVersion,
-    sourceSha256,
+  return completeAutomaticUpdatePlan(
     targetSha256,
-    reason: exactSourceProven
-      ? `Saved audits prove the exact source on ${routeDescription}. Skip byte-identical bundle components and transfer the changed, CRC-gated Apollo main to ${routeDescription}.`
-      : `Fresh analysis reports the exact reviewed source on ${routeDescription}. Each selected temple must still return a just-in-time checksum-valid ${differencePlan.source.version}/hardware-5 reply before START.`,
-  };
+    `${preservedRoutePrefix}write the complete pinned official Apollo main on ${routeDescription}.`,
+    routeSelection,
+  );
+
 }
 
 export function summarizeAutomaticApplyTransfer({
   plan,
   targetFirmware,
-  differencePlan = null,
   comparisonSourceFirmwareByRoute = {},
 } = {}) {
   if (!plan?.executable) {
@@ -1416,9 +1164,7 @@ export function summarizeAutomaticApplyTransfer({
             source.mainComponent.payload,
             targetFirmware?.mainComponent?.payload,
           )
-        : plan.flashMode === "differences"
-          ? differencePlan?.mainDifferences ?? null
-          : null;
+        : null;
       return [route, comparison];
     }),
   );
@@ -1457,21 +1203,16 @@ export async function executeAutomaticApply({
   installMode,
   targetFirmware,
   installedProvenance,
-  differenceSourceFirmware,
-  differencePlan,
   initialTempleVersions,
   observedTempleVersions,
   verifiedTempleReadiness,
   onPlan,
-  onRecovery,
 }) {
   if (!session) throw new Error("An analyzed G2 Case session is required.");
   const plan = resolveAutomaticApplyPlan({
     installMode,
     targetFirmware,
     installedProvenance,
-    differenceSourceFirmware,
-    differencePlan,
     observedTempleVersions,
   });
   if (!plan.executable) throw new Error(plan.reason);
@@ -1505,96 +1246,19 @@ export async function executeAutomaticApply({
           verifiedTempleReadiness?.resetAttempts ?? [],
       }
     : null;
+  let audit;
   try {
-    const audit = await session.flashPinnedTempleMain(
-      targetFirmware,
-      plan.route,
-      plan.flashMode === "differences"
-        ? {
-            mode: plan.flashMode,
-            differenceSourceFirmware,
-            sourceProofMode: plan.sourceProofMode,
-          }
-        : {
-            mode: plan.flashMode,
-            differenceSourceFirmware: null,
-          },
-    );
-    if (automaticPreflight) {
-      audit.automaticPreflight = automaticPreflight;
-    }
-    return {
-      plan,
-      action: "flash",
-      audit,
-    };
+    audit = await session.flashPinnedTempleMain(targetFirmware, plan.route, {
+      mode: "complete",
+    });
   } catch (error) {
     if (automaticPreflight && error?.audit) {
       error.audit.automaticPreflight = automaticPreflight;
     }
-    const recovery = differentialFallbackDetails(error, plan);
-    if (!recovery) throw error;
-    const fallbackPlan = completeAutomaticUpdatePlan(
-      plan.targetSha256,
-      `${recovery.reason} Reset both temples from a clean Case state, then retry with the complete pinned target Apollo main.`,
-    );
-    await onRecovery?.({
-      ...recovery,
-      priorPlan: plan,
-      fallbackPlan,
-      priorAudit: error.audit,
-    });
-    let recoveryReset;
-    try {
-      recoveryReset = await session.restartAndVerifyBothTemples({
-        purpose: "Differential-to-complete recovery reset",
-      });
-    } catch (resetError) {
-      const blocked = new Error(
-        `The differential happy path did not pass, and the clean recovery reset did not prove both temple applications are reachable. The complete-image fallback was not started: ${resetError.message}`,
-        { cause: resetError },
-      );
-      blocked.audit = error.audit;
-      blocked.automaticFallback = {
-        ...recovery,
-        outcome: "blocked-before-complete",
-        resetError: resetError.message,
-      };
-      throw blocked;
-    }
-
-    let audit;
-    try {
-      audit = await session.flashPinnedTempleMain(
-        targetFirmware,
-        fallbackPlan.route,
-        { mode: "complete", differenceSourceFirmware: null },
-      );
-    } catch (fallbackError) {
-      if (fallbackError?.audit) {
-        fallbackError.audit.automaticFallback = {
-          ...recovery,
-          outcome: "complete-failed-or-uncertain",
-          recoveryReset,
-          priorAudit: error.audit,
-        };
-      }
-      throw fallbackError;
-    }
-    audit.automaticFallback = {
-      ...recovery,
-      outcome: "complete-success",
-      recoveryReset,
-      priorAudit: error.audit,
-    };
-    return {
-      plan: fallbackPlan,
-      initialPlan: plan,
-      action: "flash",
-      audit,
-      recovery,
-    };
+    throw error;
   }
+  if (automaticPreflight) audit.automaticPreflight = automaticPreflight;
+  return { plan, action: "flash", audit };
 }
 
 export function installedProvenanceStorageKey(

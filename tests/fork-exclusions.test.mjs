@@ -93,6 +93,31 @@ test("fork publishes and permits official firmware only", async () => {
 
   const app = await readFile(new URL("src/App.jsx", repoUrl), "utf8");
   assert.doesNotMatch(app, /\bCFW\b|Stock ↔ CFW|channel === "custom"/i);
+
+  await Promise.all([
+    assertMissing("src/lib/differential.js"),
+    assertMissing("scripts/build_g2flash_cfw.py"),
+  ]);
+  const officialOnlyPaths = [
+    "src/lib/firmware.js",
+    "src/lib/pogoFlashBridge.js",
+    "src/lib/serial.js",
+    "src/lib/automaticRecovery.js",
+    "scripts/g2_case_pogo_flasher.py",
+    "scripts/build-firmware-archive.mjs",
+  ];
+  const officialOnlySources = await Promise.all(
+    officialOnlyPaths.map((relativePath) =>
+      readFile(new URL(relativePath, repoUrl), "utf8"),
+    ),
+  );
+  for (const [index, source] of officialOnlySources.entries()) {
+    assert.doesNotMatch(
+      source,
+      /\bCFW\b|REVIEWED_CFW|reviewed-custom|flash-reviewed-cfw|Stock\s*(?:↔|\/|-)\s*CFW/i,
+      officialOnlyPaths[index],
+    );
+  }
 });
 
 test("fork has one canonical firmware catalog source", async () => {
@@ -128,9 +153,21 @@ test("fork has one canonical firmware catalog source", async () => {
 test("fork excludes the R1 bootloader unlock implementation and payloads", async () => {
   await Promise.all([
     assertMissing("src/lib/r1Unlock.js"),
+    assertMissing("src/lib/r1Ace.js"),
+    assertMissing("scripts/build_r1_ace_patch.py"),
     assertMissing("public/firmware-updates/local-r1-owner-unlock"),
+    assertMissing("public/firmware-updates/r1-owner-unlock"),
   ]);
 
-  const app = await readFile(new URL("src/App.jsx", repoUrl), "utf8");
-  assert.doesNotMatch(app, /r1Unlock|unlockRingBootloader|Unlock R1 bootloader/);
+  const [app, firmwareCatalog, packageJson] = await Promise.all([
+    readFile(new URL("src/App.jsx", repoUrl), "utf8"),
+    readFile(new URL("public/firmware-updates/index.json", repoUrl), "utf8"),
+    readFile(new URL("package.json", repoUrl), "utf8"),
+  ]);
+  for (const source of [app, firmwareCatalog, packageJson]) {
+    assert.doesNotMatch(
+      source,
+      /r1Unlock|unlockRingBootloader|Unlock R1 bootloader|R1 ACE|ACE patch|owner[- ]unlock/i,
+    );
+  }
 });

@@ -382,7 +382,7 @@ export function buildG2ChooserFilters(
   const serialFilter = glassesSerialChooserFilter(expectedSerial);
   const filters = [];
   // A remembered name is useful as the strongest first choice, but it must not
-  // be the only choice. Stock and the retired advertised-name CFW builds can
+  // be the only choice. Official releases and retired experimental builds can
   // give one physical arm different trailing name bytes. Treating the old
   // exact name as exclusive made a healthy temple disappear from Chrome's
   // chooser after a firmware transition.

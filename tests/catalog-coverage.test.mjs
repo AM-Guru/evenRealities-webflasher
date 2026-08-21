@@ -11,7 +11,7 @@ import {
 } from "../src/lib/catalogCoverage.js";
 import { TEMPLE_FLASH_TARGETS } from "../src/lib/templeFlashTargets.js";
 
-const LEGACY_CFW_SHA256 =
+const LEGACY_TARGET_SHA256 =
   "5c1539fd39c599e6035f6a8ec0779ba687c250d342a24c21a39952fed6c56aa0";
 const SUPERSEDED_ADVERTISED_CFW_2_2_8_7_SHA256 =
   "e9d9e8b30d5f240fb8e2fc157f552515cee4c785af6886840d420ec27e86f4e0";
@@ -33,7 +33,7 @@ const OFFICIAL_G2_2_2_9_22_SHA256 =
 // The catalog production actually served on 2026-07-28 and is older than the
 // current official releases pinned by this build.
 const STALE_PRODUCTION_CATALOG = [
-  { id: "g2-custom-2.2.6.10", version: "2.2.6.10-cfw", sha256: LEGACY_CFW_SHA256 },
+  { id: "g2-custom-2.2.6.10", version: "2.2.6.10-preview", sha256: LEGACY_TARGET_SHA256 },
   {
     id: "g2-official-2.2.6.10",
     version: "2.2.6.10",
@@ -42,9 +42,9 @@ const STALE_PRODUCTION_CATALOG = [
 ];
 
 test("parses versions that carry a channel suffix", () => {
-  assert.deepEqual(parseFirmwareVersion("2.2.6.10-cfw"), [2, 2, 6, 10]);
+  assert.deepEqual(parseFirmwareVersion("2.2.6.10-preview"), [2, 2, 6, 10]);
   assert.deepEqual(parseFirmwareVersion("2.2.6.11"), [2, 2, 6, 11]);
-  assert.equal(parseFirmwareVersion("cfw"), null);
+  assert.equal(parseFirmwareVersion("preview"), null);
   assert.equal(parseFirmwareVersion(null), null);
 });
 
@@ -52,7 +52,7 @@ test("orders versions numerically, not lexically", () => {
   // The bug this guards: "2.2.6.9" sorts after "2.2.6.10" as a string.
   assert.equal(compareFirmwareVersions("2.2.6.11", "2.2.6.10"), 1);
   assert.equal(compareFirmwareVersions("2.2.6.10", "2.2.6.11"), -1);
-  assert.equal(compareFirmwareVersions("2.2.6.10", "2.2.6.10-cfw"), 0);
+  assert.equal(compareFirmwareVersions("2.2.6.10", "2.2.6.10-preview"), 0);
   assert.equal(compareFirmwareVersions("2.2.6.10", "nonsense"), null);
 });
 
@@ -129,7 +129,7 @@ test("offers only official firmware and covers every compiled writer target", as
   );
 });
 
-test("excludes advertisement-patched CFW releases from both mutation paths", async () => {
+test("excludes advertisement-patched custom firmware releases from both mutation paths", async () => {
   const catalog = JSON.parse(
     await readFile(
       new URL("../public/firmware-updates/index.json", import.meta.url),

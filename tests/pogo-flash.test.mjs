@@ -8,17 +8,11 @@ import {
   POGO_FLASH_PROOF,
   POGO_FLASH_RESULT_LENGTH,
   PogoFlashSafetyError,
-  REVIEWED_CFW_BASE_VERSION,
-  REVIEWED_CFW_VERSION,
-  REVIEWED_CFW_IMAGE_SHA256,
-  REVIEWED_CFW_MAIN_BYTES,
-  REVIEWED_CFW_MAIN_SHA256,
   RetryablePogoFlashError,
   TEMPLE_FLASH_TARGETS,
   TempleRejectedError,
   assertPinnedTempleFlashCandidate,
   classifyPogoFlashRecoveryBoundary,
-  assertReviewedCfwFlashCandidate,
   crc16CcittFalse,
   decodePogoFlashRetainedResult,
   decodeTempleVersion,
@@ -38,6 +32,8 @@ import {
   verifyPogoFlashOppositePhaseStop,
   verifyPogoFlashZeroWriteSetupStop,
 } from "../src/lib/pogoFlashBridge.js";
+
+const OFFICIAL_MAIN_BYTES = 3_523_396;
 import { sha256Hex, writeU32LE } from "../src/lib/firmware.js";
 import {
   G2CaseSession,
@@ -95,7 +91,7 @@ import { getVerifiedPogoBridgePayload } from "../src/lib/pogoBridge.js";
 
 const REVIEWED_STOCK_IMAGE_SHA256 =
   "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa";
-// The older CFW that carried this version number earned hardware validation,
+// The older custom firmware that carried this version number earned hardware validation,
 // but the current g2flash-derived 2.2.6.11 has distinct bytes and remains
 // unvalidated until it is exercised on physical glasses.
 const HARDWARE_VALIDATED_IMAGE_SHA256 = new Set([
@@ -1384,8 +1380,8 @@ test("binds retained restoration proof to route and final host sequence", () => 
     [24, 0x3ff],
     [28, 0x3ff],
     [40, 3540],
-    [44, REVIEWED_CFW_MAIN_BYTES],
-    [48, REVIEWED_CFW_MAIN_BYTES],
+    [44, OFFICIAL_MAIN_BYTES],
+    [48, OFFICIAL_MAIN_BYTES],
     [60, 0],
   ]) {
     writeU32LE(result, offset, value);
@@ -1399,7 +1395,7 @@ test("binds retained restoration proof to route and final host sequence", () => 
     "right",
     0x63,
     {
-      expectedAcceptedSize: REVIEWED_CFW_MAIN_BYTES,
+      expectedAcceptedSize: OFFICIAL_MAIN_BYTES,
       expectedOtaSequence: 3540,
     },
   );
@@ -1412,7 +1408,7 @@ test("binds retained restoration proof to route and final host sequence", () => 
     () => parsePogoFlashRetainedResult(result, POGO_FLASH_PROOF, "right", 0x64),
     PogoFlashSafetyError,
   );
-  writeU32LE(result, 48, REVIEWED_CFW_MAIN_BYTES - 1);
+  writeU32LE(result, 48, OFFICIAL_MAIN_BYTES - 1);
   assert.throws(
     () =>
       parsePogoFlashRetainedResult(
@@ -1421,7 +1417,7 @@ test("binds retained restoration proof to route and final host sequence", () => 
         "right",
         0x63,
         {
-          expectedAcceptedSize: REVIEWED_CFW_MAIN_BYTES,
+          expectedAcceptedSize: OFFICIAL_MAIN_BYTES,
           expectedOtaSequence: 3540,
         },
       ),
@@ -1553,7 +1549,7 @@ test("accepts an exact retained restoration after a host-only response timeout",
     [20, 0x3ff],
     [24, 0x3ff],
     [28, 0x3ff],
-    [44, REVIEWED_CFW_MAIN_BYTES],
+    [44, OFFICIAL_MAIN_BYTES],
     [48, 904000],
     [60, 0],
     [120, 1],
@@ -1731,30 +1727,6 @@ test("promotes an exhausted zero-byte YHM setup to the Bluetooth fallback", () =
   );
 });
 
-test("rehashes the main payload at the final reviewed-CFW trust gate", async () => {
-  const payload = new Uint8Array(REVIEWED_CFW_MAIN_BYTES);
-  const candidate = {
-    kind: "bundle",
-    fileSha256: REVIEWED_CFW_IMAGE_SHA256,
-    g2Version: REVIEWED_CFW_VERSION,
-    mainComponent: {
-      name: "ota/s200_firmware_ota.bin",
-      typeId: 0,
-      header: new Uint8Array(128),
-      payload,
-      payloadSha256: REVIEWED_CFW_MAIN_SHA256,
-    },
-  };
-  await assert.rejects(
-    () => assertReviewedCfwFlashCandidate(candidate),
-    PogoFlashSafetyError,
-  );
-  await assert.rejects(
-    () => assertPinnedTempleFlashCandidate(candidate),
-    PogoFlashSafetyError,
-  );
-});
-
 test("the writer's setup stop skips the ladder rung that is too short for it", () => {
   // The read-only version path still clears a post-reset route on the 15 s
   // rung, so the ladder keeps it. The writer's zero-write setup stop does not:
@@ -1780,7 +1752,7 @@ test("the writer's setup stop skips the ladder rung that is too short for it", (
 });
 
 test("pins every temple-flash target to a distinct image and main digest", () => {
-  assert.ok(TEMPLE_FLASH_TARGETS.length >= 2, "expected stock images beside the CFW");
+  assert.ok(TEMPLE_FLASH_TARGETS.length >= 2, "expected stock images beside the experimental");
   const images = new Set(TEMPLE_FLASH_TARGETS.map((t) => t.imageSha256));
   const mains = new Set(TEMPLE_FLASH_TARGETS.map((t) => t.mainSha256));
   assert.equal(images.size, TEMPLE_FLASH_TARGETS.length);
@@ -1852,13 +1824,6 @@ test("accepts a pinned stock main but still rejects a mismatched payload", async
   // Right length, wrong bytes: the gate re-hashes, so this must fail closed.
   await assert.rejects(
     () => assertPinnedTempleFlashCandidate(
-      make(new Uint8Array(stock.mainBytes), stock.mainSha256),
-    ),
-    PogoFlashSafetyError,
-  );
-  // A stock image must never satisfy the reviewed-CFW-specific pin.
-  await assert.rejects(
-    () => assertReviewedCfwFlashCandidate(
       make(new Uint8Array(stock.mainBytes), stock.mainSha256),
     ),
     PogoFlashSafetyError,

@@ -9,14 +9,6 @@ import {
   G2_FIRMWARE_REVOCATIONS,
   OFFICIAL_G2_SHA256,
   POGO_TRANSFER_RESEARCH,
-  REVIEWED_G2FLASH_CFW_2_2_6_11,
-  REVIEWED_CFW,
-  REVIEWED_CFW_2_2_7_16,
-  REVIEWED_CFW_2_2_8_7,
-  REVIEWED_CFW_2_2_8_8,
-  REVIEWED_CFW_2_2_8_9,
-  REVIEWED_CFW_2_2_8_10,
-  REVIEWED_CFW_2_2_8_11,
   additiveBigEndianWordSum,
   classifyG2Firmware,
   crc32,
@@ -181,87 +173,12 @@ test("rejects a stale Apollo inner CRC even when the outer CRC is refreshed", ()
   assert.throws(() => parseEvenOTA(bundle), /inner CRC-32/);
 });
 
-test("recognizes the exact reviewed CFW trust pin", () => {
-  const trust = classifyG2Firmware(REVIEWED_CFW.sha256);
-  assert.equal(trust.trust, "reviewed-custom");
-  assert.equal(trust.baseVersion, "2.2.6.10");
-  assert.equal(trust.capabilities.length, 6);
-  assert.equal(trust.capabilities.some((value) => /full display/i.test(value)), true);
-  assert.equal(
-    trust.capabilities.some((value) => /g2flash|framebuffer|zlib|rle/i.test(value)),
-    false,
-  );
-});
-
-test("recognizes the g2flash-based G2 2.2.6.11 trust pin", () => {
-  const trust = classifyG2Firmware(REVIEWED_G2FLASH_CFW_2_2_6_11.sha256);
-  assert.equal(trust.trust, "reviewed-custom");
-  assert.equal(trust.version, "2.2.6.11");
-  assert.equal(trust.baseVersion, "2.2.6.10");
-  assert.equal(trust.capabilities.some((value) => /wear-status and compass/i.test(value)), true);
-});
-
-test("recognizes the stock-based G2 2.2.7 reviewed CFW trust pin", () => {
-  const trust = classifyG2Firmware(REVIEWED_CFW_2_2_7_16.sha256);
-  assert.equal(trust.trust, "reviewed-custom");
-  assert.equal(trust.version, "2.2.7.16");
-  assert.equal(trust.baseVersion, "2.2.7.14");
-  assert.equal(trust.capabilities.some((value) => /standard Even AI/i.test(value)), true);
-  assert.equal(trust.capabilities.some((value) => /full display/i.test(value)), true);
-});
-
-test("retains the superseded stock-based G2 2.2.8.8 trust pin", () => {
-  const trust = classifyG2Firmware(REVIEWED_CFW_2_2_8_8.sha256);
-  assert.equal(trust.trust, "reviewed-custom");
-  assert.equal(trust.version, "2.2.8.8");
-  assert.equal(trust.baseVersion, "2.2.8.4");
-  assert.equal(trust.capabilities.some((value) => /wear-status and compass/i.test(value)), true);
-  assert.equal(trust.capabilities.some((value) => /pair-serial/i.test(value)), true);
-});
-
-test("recognizes the stock-based G2 2.2.8.9 reviewed CFW trust pin", () => {
-  const trust = classifyG2Firmware(REVIEWED_CFW_2_2_8_9.sha256);
-  assert.equal(trust.trust, "reviewed-custom");
-  assert.equal(trust.version, "2.2.8.9");
-  assert.equal(trust.baseVersion, "2.2.8.4");
-  assert.equal(trust.capabilities.some((value) => /pair-serial/i.test(value)), true);
-  assert.equal(trust.capabilities.some((value) => /both temples/i.test(value)), true);
-});
-
-test("recognizes withdrawn G2 2.2.8.10 evidence without claiming it is cold-start safe", () => {
-  const trust = classifyG2Firmware(REVIEWED_CFW_2_2_8_10.sha256);
-  assert.equal(trust.trust, "reviewed-custom");
-  assert.equal(trust.version, "2.2.8.10");
-  assert.equal(trust.baseVersion, "2.2.8.4");
-  assert.equal(trust.capabilities.some((value) => /withdrawn/i.test(value)), true);
-  assert.equal(trust.capabilities.some((value) => /cold-start-safe/i.test(value)), false);
-});
-
-test("does not trust the retired G2 2.2.8.11 CFW", () => {
-  const trust = classifyG2Firmware(REVIEWED_CFW_2_2_8_11.sha256);
-  assert.equal(trust.trust, "unrecognized");
-  assert.equal(trust.version, null);
-  assert.equal(trust.baseVersion, null);
-  assert.deepEqual(trust.capabilities, []);
-  assert.equal(findG2FirmwareRevocation(REVIEWED_CFW_2_2_8_11.sha256), null);
-});
-
-test("revokes every advertisement-modified 2.2.8 CFW hash", () => {
-  assert.deepEqual(
-    G2_FIRMWARE_REVOCATIONS.map(({ version }) => version),
-    ["2.2.8.7", "2.2.8.8", "2.2.8.9", "2.2.8.10"],
-  );
-  for (const revocation of G2_FIRMWARE_REVOCATIONS) {
-    assert.equal(findG2FirmwareRevocation(revocation.sha256), revocation);
-    assert.match(revocation.reason, /advertised-name|Bluetooth discovery/i);
-  }
-});
-
-test("retains the superseded 2.2.8.7 trust pin without claiming its failed name patch", () => {
-  const trust = classifyG2Firmware(REVIEWED_CFW_2_2_8_7.sha256);
-  assert.equal(trust.trust, "reviewed-custom");
-  assert.equal(trust.version, "2.2.8.7");
-  assert.equal(trust.capabilities.some((value) => /Bluetooth setup|pair-serial/i.test(value)), false);
+test("recognizes only official G2 trust pins", () => {
+  const trust = classifyG2Firmware(OFFICIAL_G2_SHA256["2.2.9.22"]);
+  assert.equal(trust.trust, "official-pinned");
+  assert.equal(trust.version, "2.2.9.22");
+  assert.deepEqual(G2_FIRMWARE_REVOCATIONS, []);
+  assert.equal(findG2FirmwareRevocation("0".repeat(64)), null);
 });
 
 test("decodes and safely toggles a complemented option word", () => {
@@ -528,7 +445,7 @@ test("records successful case-pogo transfers and enables only the guarded browse
   assert.equal(POGO_TRANSFER_RESEARCH.caseUsbBridge.attempts, 40);
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.status,
-    "both-temples-reviewed-cfw",
+    "official-firmware-only",
   );
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.currentSourceReviewGate,
@@ -652,11 +569,11 @@ test("records successful case-pogo transfers and enables only the guarded browse
   );
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.successfulTransfers.right.acceptedBytes,
-    3539474,
+    3523396,
   );
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.successfulTransfers.right.recordsSent,
-    3540,
+    3524,
   );
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.successfulTransfers.right.finishAckReceived,
@@ -668,11 +585,11 @@ test("records successful case-pogo transfers and enables only the guarded browse
   );
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.successfulTransfers.left.acceptedBytes,
-    3539474,
+    3523396,
   );
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.successfulTransfers.left.recordsSent,
-    3540,
+    3524,
   );
   assert.equal(
     POGO_TRANSFER_RESEARCH.caseUsbBridge.successfulTransfers.left.finishAckReceived,
@@ -710,52 +627,52 @@ test("records successful case-pogo transfers and enables only the guarded browse
   assert.equal(POGO_TRANSFER_RESEARCH.caseUsbBridge.attempts, 40);
   assert.equal(POGO_TRANSFER_RESEARCH.caseUsbBridge.completeWiredTransfers, 7);
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest.right
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest.right
       .finishAckReceived,
     true,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest.left
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest.left
       .rejectedRecord,
     2800,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest.left
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest.left
       .finishAckReceived,
     false,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest
       .repeatLeftSetupGuard.routePhaseSetupAttempts,
     4,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest
       .repeatLeftSetupGuard.otaMutationAttempted,
     false,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest
       .repeatLeftSetupGuard.finalStandaloneReset.bothApplicationsVerified,
     true,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest
       .defaultBilateralStockTest.right.acceptedBytes,
     338000,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest
       .defaultBilateralStockTest.right.finishAckReceived,
     false,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest
       .defaultBilateralStockTest.left.transferAttempted,
     false,
   );
   assert.equal(
-    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceCfwTest
+    POGO_TRANSFER_RESEARCH.caseUsbBridge.browserDifferenceTest
       .defaultBilateralStockTest.finalReset.bothApplicationsVerified,
     true,
   );

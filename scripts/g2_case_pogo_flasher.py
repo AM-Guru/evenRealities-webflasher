@@ -58,9 +58,6 @@ BRIDGE_SHA256 = (
     "eba56380f04bf00ad9d87dffbc40c3292ec5b3cee458d3607c8cffd0dcbe335b"
 )
 BRIDGE_BANNER = b"G2_POGO_FLASH_BRIDGE_V7\n"
-REVIEWED_CFW_SHA256 = (
-    "105032302d02ccf943b785070cf15877a918c120b7ca1332bb6261f70eb6d683"
-)
 REVIEWED_OFFICIAL_SHA256 = (
     "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa"
 )
@@ -68,12 +65,7 @@ REVIEWED_OFFICIAL_MAIN_SHA256 = (
     "36c5b0e499a68ac2493a497bdab9740fd3e7027730c26a9094eca47268a27863"
 )
 REVIEWED_OFFICIAL_MAIN_BYTES = 3_523_396
-REVIEWED_MAIN_SHA256 = (
-    "2d82addd4c9916781b50f7be377645b797f10856a460bc5190f3172e7161614e"
-)
-REVIEWED_MAIN_BYTES = 3_543_523
 REVIEWED_BASE_VERSION = "2.2.6.10"
-REVIEWED_CFW_VERSION = "2.2.6.11"
 REVIEWED_CASE_VERSION = "1.2.57"
 FINAL_RESET_COMMAND = b"DEB0\n"
 FINAL_RESET_CONFIRMATION = re.compile(
@@ -1097,16 +1089,10 @@ def build_parser() -> argparse.ArgumentParser:
     reset.add_argument("--expect-version", default=REVIEWED_BASE_VERSION)
     reset.add_argument("--glasses-seated-confirmed", action="store_true")
 
-    for command, help_text in (
-        (
-            "flash-reviewed-cfw",
-            "flash the exact reviewed CFW Apollo-main image",
-        ),
-        (
-            "flash-reviewed-official",
-            "restore the exact pinned official Apollo-main image",
-        ),
-    ):
+    for command, help_text in ((
+        "flash-reviewed-official",
+        "restore the exact pinned official Apollo-main image",
+    ),):
         flash = subparsers.add_parser(command, help=help_text)
         flash.add_argument("image", type=Path)
         flash.add_argument("--device", required=True)
@@ -1120,11 +1106,7 @@ def build_parser() -> argparse.ArgumentParser:
         flash.add_argument(
             "--expect-current-version",
             default=None,
-            help=(
-                "override the live source-version gate; by default CFW install "
-                "requires Stock 2.2.6.10 and official restore accepts Stock "
-                "2.2.6.10 or reviewed CFW 2.2.6.11"
-            ),
+            help="override the live source-version gate",
         )
         flash.add_argument(
             "--pacing-profile",
@@ -1307,38 +1289,15 @@ def main() -> int:
                     return_code = 1
         return return_code
 
-    assert args.command in (
-        "flash-reviewed-cfw",
-        "flash-reviewed-official",
-    )
-    image_kind = (
-        "CFW"
-        if args.command == "flash-reviewed-cfw"
-        else "official"
-    )
-    reviewed_sha256 = (
-        REVIEWED_CFW_SHA256
-        if args.command == "flash-reviewed-cfw"
-        else REVIEWED_OFFICIAL_SHA256
-    )
-    reviewed_main_sha256 = (
-        REVIEWED_MAIN_SHA256
-        if args.command == "flash-reviewed-cfw"
-        else REVIEWED_OFFICIAL_MAIN_SHA256
-    )
-    reviewed_main_bytes = (
-        REVIEWED_MAIN_BYTES
-        if args.command == "flash-reviewed-cfw"
-        else REVIEWED_OFFICIAL_MAIN_BYTES
-    )
+    assert args.command == "flash-reviewed-official"
+    image_kind = "official"
+    reviewed_sha256 = REVIEWED_OFFICIAL_SHA256
+    reviewed_main_sha256 = REVIEWED_OFFICIAL_MAIN_SHA256
+    reviewed_main_bytes = REVIEWED_OFFICIAL_MAIN_BYTES
     expected_current_versions = (
         {args.expect_current_version}
         if args.expect_current_version
-        else (
-            {REVIEWED_BASE_VERSION}
-            if image_kind == "CFW"
-            else {REVIEWED_BASE_VERSION, REVIEWED_CFW_VERSION}
-        )
+        else {REVIEWED_BASE_VERSION}
     )
     if not args.execute_main_ota:
         parser.error("flash requires --execute-main-ota")
@@ -1392,13 +1351,9 @@ def main() -> int:
         "routes": routes,
         "package": asdict(plan),
         "installed_identity": {
-            "channel": "custom" if image_kind == "CFW" else "official",
+            "channel": "official",
             "reported_version": plan.expected_device_version,
-            "display_version": (
-                f"{plan.expected_device_version} CFW"
-                if image_kind == "CFW"
-                else plan.expected_device_version
-            ),
+            "display_version": plan.expected_device_version,
             "exact_image_sha256": plan.image_sha256,
             "evidence": (
                 "reviewed image pins, accepted transfer counts, postflight, "

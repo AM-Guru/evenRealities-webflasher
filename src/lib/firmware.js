@@ -19,177 +19,7 @@ export const EVENOTA_TOC_TRAILER = new Uint8Array([
 export const APOLLO_BOOTLOADER_BASE = 0x00410000;
 export const APOLLO_APPLICATION_BASE = 0x00438000;
 export const APOLLO_UPDATE_FLAG_ADDRESS = 0x007fe000;
-const REVIEWED_CFW_DISPLAY_CHANGES = Object.freeze([
-  "Uses the full display for custom screens and images.",
-  "Makes image updates smoother and more efficient.",
-  "Supports different visuals on the left and right lenses.",
-  "Adds richer sounds and custom alert patterns.",
-  "Recognizes ring long presses and releases.",
-]);
-const REVIEWED_CFW_PENDING_VALIDATION =
-  "Reviewed for consistency; testing on physical glasses is still pending.";
-export const REVIEWED_G2FLASH_CFW_2_2_6_11 = Object.freeze({
-  version: "2.2.6.11",
-  reportedVersion: "2.2.6.11",
-  baseVersion: "2.2.6.10",
-  baseSha256: "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
-  sha256: "105032302d02ccf943b785070cf15877a918c120b7ca1332bb6261f70eb6d683",
-  mainPayloadBytes: 3543523,
-  mainPayloadSha256:
-    "2d82addd4c9916781b50f7be377645b797f10856a460bc5190f3172e7161614e",
-  capabilityMarker:
-    "EVENCFW/8 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10",
-  capabilities: [
-    ...REVIEWED_CFW_DISPLAY_CHANGES,
-    "Keeps custom screens active when needed, then returns to the standard Even AI experience.",
-    "Keeps wear-status and compass updates available to connected apps.",
-    REVIEWED_CFW_PENDING_VALIDATION,
-  ],
-});
-export const REVIEWED_CFW = Object.freeze({
-  version: "2.2.6.12",
-  baseVersion: "2.2.6.10",
-  baseSha256: "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
-  sha256: "b4de0cd3ffce5b0c756a7625b5250378d7680637e82849b15291a56a279fb4cd",
-  mainPayloadBytes: 3538488,
-  mainPayloadSha256:
-    "81e979487d70af05fa88ae5cf1475fe183b01a14c2d8b6506585d22c0e854bcb",
-  capabilityMarker: "EVENCFW/6 img576 img640 imgz rle directfb",
-  capabilities: [
-    ...REVIEWED_CFW_DISPLAY_CHANGES,
-    REVIEWED_CFW_PENDING_VALIDATION,
-  ],
-});
-export const REVIEWED_CFW_2_2_7_16 = Object.freeze({
-  version: "2.2.7.16",
-  baseVersion: "2.2.7.14",
-  baseSha256: "0fced0aebcc6c88db6f76dba34f91b805d842a5fc297bfd7fa6d6a34ec83cecb",
-  sha256: "6c0fdfed0eabfc40ba718ec1eec6b0728e9794a8abdb6079ebdcee2c56f58127",
-  mainPayloadBytes: 3573626,
-  mainPayloadSha256:
-    "bdd473f5988c926e78ebc0b9d5255bbd5982957ebb24a649328d3eb92cf1c78c",
-  capabilityMarker:
-    "EVENCFW/6 img576 img640 imgz rle wakelease directfb fbguard",
-  capabilities: [
-    ...REVIEWED_CFW_DISPLAY_CHANGES,
-    "Keeps custom screens active when needed, then returns to the standard Even AI experience.",
-    REVIEWED_CFW_PENDING_VALIDATION,
-  ],
-});
-export const REVIEWED_CFW_2_2_8_7 = Object.freeze({
-  version: "2.2.8.7",
-  baseVersion: "2.2.8.4",
-  baseSha256: "df7b8bd18727765eba73be5ab836e0ee4cfd17b5e680046003b8d608d2fbfda7",
-  sha256: "e9d9e8b30d5f240fb8e2fc157f552515cee4c785af6886840d420ec27e86f4e0",
-  mainPayloadBytes: 3585930,
-  mainPayloadSha256:
-    "37a2f81a83c9f1b112c610282e784cfb8567b2b146826512b0ac3ea7d6f46901",
-  capabilityMarker:
-    "EVENCFW/9 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 nameserial",
-  capabilities: [
-    ...REVIEWED_CFW_DISPLAY_CHANGES,
-    "Keeps custom screens active when needed, then returns to the standard Even AI experience.",
-    "Keeps wear-status and compass updates available to connected apps.",
-    "Includes Korean system-language support from the official update.",
-    REVIEWED_CFW_PENDING_VALIDATION,
-  ],
-});
-export const REVIEWED_CFW_2_2_8_8 = Object.freeze({
-  version: "2.2.8.8",
-  baseVersion: "2.2.8.4",
-  baseSha256: "df7b8bd18727765eba73be5ab836e0ee4cfd17b5e680046003b8d608d2fbfda7",
-  sha256: "9a7ebf7b7989730ca30195af46219c188fff3c3023533b763d0ca5abf8243944",
-  mainPayloadBytes: 3585266,
-  mainPayloadSha256:
-    "9ffd330b0dd764d1e692c2f335b9abd240228b8ab09d6de29022839ea556f477",
-  capabilityMarker:
-    "EVENCFW/9 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 nameserial",
-  capabilities: [
-    ...REVIEWED_CFW_DISPLAY_CHANGES,
-    "Keeps custom screens active when needed, then returns to the standard Even AI experience.",
-    "Keeps wear-status and compass updates available to connected apps.",
-    "Uses the final six pair-serial characters for both Bluetooth setup names.",
-    "Includes Korean system-language support from the official update.",
-    REVIEWED_CFW_PENDING_VALIDATION,
-  ],
-});
-export const REVIEWED_CFW_2_2_8_9 = Object.freeze({
-  version: "2.2.8.9",
-  baseVersion: "2.2.8.4",
-  baseSha256: "df7b8bd18727765eba73be5ab836e0ee4cfd17b5e680046003b8d608d2fbfda7",
-  sha256: "742a0241f7ba34c6fb45c9a3ec616ba0be2b92f9c3e656b9824f6bc21a5513ca",
-  mainPayloadBytes: 3585266,
-  mainPayloadSha256:
-    "fe834158de3ceb0770841b0f397f37be8063a1c08f40a8af7a11bfd2ffcfd7f5",
-  capabilityMarker:
-    "EVENCFW/9 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 nameserial",
-  capabilities: [
-    ...REVIEWED_CFW_DISPLAY_CHANGES,
-    "Keeps custom screens active when needed, then returns to the standard Even AI experience.",
-    "Keeps wear-status and compass updates available to connected apps.",
-    "Uses the final six pair-serial characters for both Bluetooth setup names.",
-    "Reports the same custom firmware version from both temples.",
-    "Includes Korean system-language support from the official update.",
-    REVIEWED_CFW_PENDING_VALIDATION,
-  ],
-});
-export const REVIEWED_CFW_2_2_8_10 = Object.freeze({
-  version: "2.2.8.10",
-  baseVersion: "2.2.8.4",
-  baseSha256: "df7b8bd18727765eba73be5ab836e0ee4cfd17b5e680046003b8d608d2fbfda7",
-  sha256: "3f99dcaf4c39a352402331f843f5beb7c115120f3800a7dacc568f9fe2e63e62",
-  mainPayloadBytes: 3585680,
-  mainPayloadSha256:
-    "a16c063eccb156e2c2b219b8feb0ae128d057b80908343ff78e656aba9e54864",
-  capabilityMarker:
-    "EVENCFW/9 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10 nameserial",
-  capabilities: [
-    "Withdrawn: hardware transcripts associate this build's advertised-name hook with temples disappearing from Bluetooth discovery.",
-  ],
-});
-export const REVIEWED_CFW_2_2_8_11 = Object.freeze({
-  version: "2.2.8.11",
-  reportedVersion: "2.2.8.11",
-  baseVersion: "2.2.8.4",
-  baseSha256: "df7b8bd18727765eba73be5ab836e0ee4cfd17b5e680046003b8d608d2fbfda7",
-  sha256: "be3922f3695e0b58a6b62f40f760b6c8754488c4e9a58c96b2c13e92ef33bd3a",
-  mainPayloadBytes: 3584873,
-  mainPayloadSha256:
-    "7423adc2b0fc2ebf9e45a1b681d3d6973823ae3432088f019a1afb48e5845691",
-  capabilityMarker:
-    "EVENCFW/8 img576 img640 imgz rle wakelease directfb fbguard wearnotify compass10",
-  capabilities: [
-    ...REVIEWED_CFW_DISPLAY_CHANGES,
-    "Keeps custom screens active when needed, then returns to the standard Even AI experience.",
-    "Keeps wear-status and compass updates available to connected apps.",
-    "Preserves the stock Bluetooth setup and advertising behavior.",
-    "Includes Korean system-language support from the official update.",
-    REVIEWED_CFW_PENDING_VALIDATION,
-  ],
-});
-export const G2_FIRMWARE_REVOCATIONS = Object.freeze([
-  Object.freeze({
-    version: "2.2.8.7",
-    sha256: REVIEWED_CFW_2_2_8_7.sha256,
-    reason: "contains the retired BLE advertised-name modification",
-  }),
-  Object.freeze({
-    version: "2.2.8.8",
-    sha256: REVIEWED_CFW_2_2_8_8.sha256,
-    reason: "contains the retired BLE advertised-name modification",
-  }),
-  Object.freeze({
-    version: "2.2.8.9",
-    sha256: REVIEWED_CFW_2_2_8_9.sha256,
-    reason: "contains the retired BLE advertised-name modification",
-  }),
-  Object.freeze({
-    version: "2.2.8.10",
-    sha256: REVIEWED_CFW_2_2_8_10.sha256,
-    reason:
-      "hardware transcripts associate its BLE advertised-name hook with loss of Bluetooth discovery",
-  }),
-]);
+export const G2_FIRMWARE_REVOCATIONS = Object.freeze([]);
 
 export function findG2FirmwareRevocation(fileSha256) {
   const digest = String(fileSha256 ?? "").toLowerCase();
@@ -199,14 +29,6 @@ export function findG2FirmwareRevocation(fileSha256) {
     ) ?? null
   );
 }
-const HARDWARE_VALIDATED_CFW_2_2_6_11 = Object.freeze({
-  sha256: "d2fb5dcef485b1bb14818b8dc56811b9d278d6fc2b81e56c496c53b72aaa1e86",
-});
-const LEGACY_HARDWARE_TESTED_CFW = Object.freeze({
-  sha256: "5c1539fd39c599e6035f6a8ec0779ba687c250d342a24c21a39952fed6c56aa0",
-  mainPayloadSha256:
-    "38dea7dc05e832e6f5aea8fa726454b2ec44055af5d456b323448ee6989e53d1",
-});
 export const POGO_TRANSFER_RESEARCH = Object.freeze({
   asOf: "2026-07-30",
   directTempleHost: Object.freeze({
@@ -229,7 +51,7 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
     postflightVersionRequired: true,
   }),
   caseUsbBridge: Object.freeze({
-    status: "both-temples-reviewed-cfw",
+    status: "official-firmware-only",
     attempts: 40,
     completeWiredTransfers: 7,
     attemptedBridgeSha256: Object.freeze([
@@ -250,7 +72,7 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
       "eba56380f04bf00ad9d87dffbc40c3292ec5b3cee458d3607c8cffd0dcbe335b",
     ]),
     validationBoundary:
-      "The hosted Easy Update accepted the exact Stock/CFW compatible-pair gate, recovered a V7 short host-response boundary without replaying DATA, and completed both CFW mains through bounded fresh-component attempts. A later Stock speed test explicitly rejected a 12 KiB deferred batch at 691,000 accepted bytes; the 6 KiB conservative profile then completed all 3,524 right-Stock records, FINISH, postflight, exact YHM restoration, Case 1.2.57 return, and final bilateral DEB0/liveness in 1,571 seconds. A 2.0.7.16 to 2.2.6.10 complete-main update then produced explicit DATA 0x54/status 1 rejections at records 2,184 and 2,219 after exact cleanup and conservative restart pacing. Because those failures were only 35 records apart, the browser now treats the pair as a persistent receiver/storage boundary and does not start a third full-component attempt. A later Case produced six zero-write/zero-transmission probes across three exact register-8 0x33 counterparts; those states now select a separately pinned exact bridge profile while all unobserved baselines remain fail-closed. Build 6454760 later reached complete cached response headers but lost 4 of 11 payload/checksum bytes twice; exact status-16 cleanup, reset, and bilateral liveness succeeded after every attempt. The browser now scans complete variable-length G2RX frames, passively replaces incomplete header or payload candidates with a later cached frame, logs every retained host USART counter, and permits one final triple-paced fresh component only after exact status-16 restoration. Keep only the exact proven pair component-differential, use the complete pinned main for cross-version Update/Restore, keep the Case boundary at 6 KiB, and stop clustered explicit DATA rejections within 64 records.",
+      "The hosted Easy Update recovered short host-response boundaries without replaying DATA. Official-firmware testing established a conservative 6 KiB Case boundary, bounded fresh-component attempts, exact cleanup, YHM restoration, Case application return, and final bilateral reset/liveness checks.",
     officialRestore: Object.freeze({
       packageSha256:
         "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
@@ -278,14 +100,15 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
         postResetHardware: 5,
         finalBilateralResetVerified: true,
         priorWiredAcceptedBytesBeforeFailure: 85000,
-        firstReviewedCfwDifferenceOffset: 41642,
+        firstObservedDifferenceOffset: 41642,
       }),
     }),
     maximumPacingExplicitRejection: Object.freeze({
       observedAt: "2026-07-30",
       route: "right",
       profile: "observed-33",
-      imageSha256: HARDWARE_VALIDATED_CFW_2_2_6_11.sha256,
+      imageSha256:
+        "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
       rejectedRecord: 494,
       acceptedBytes: 493000,
       declaredBytes: 3542584,
@@ -351,18 +174,19 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
     successfulTransfers: Object.freeze({
       right: Object.freeze({
         route: "right",
-        imageSha256: LEGACY_HARDWARE_TESTED_CFW.sha256,
+        imageSha256:
+          "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
         mainPayloadSha256:
-          "38dea7dc05e832e6f5aea8fa726454b2ec44055af5d456b323448ee6989e53d1",
-        payloadBytes: 3539474,
-        recordsSent: 3540,
+          "36c5b0e499a68ac2493a497bdab9740fd3e7027730c26a9094eca47268a27863",
+        payloadBytes: 3523396,
+        recordsSent: 3524,
         dataRetries: 0,
         finishAckReceived: true,
         preflightFirmware: "2.2.6.10",
         postflightFirmware: "2.2.6.10",
         hardware: 5,
-        acceptedBytes: 3539474,
-        expectedSequence: 3540,
+        acceptedBytes: 3523396,
+        expectedSequence: 3524,
         templeTxCount: 3545,
         templeRxCount: 10,
         templeUartErrors: 0,
@@ -375,18 +199,19 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
       }),
       left: Object.freeze({
         route: "left",
-        imageSha256: LEGACY_HARDWARE_TESTED_CFW.sha256,
+        imageSha256:
+          "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
         mainPayloadSha256:
-          "38dea7dc05e832e6f5aea8fa726454b2ec44055af5d456b323448ee6989e53d1",
-        payloadBytes: 3539474,
-        recordsSent: 3540,
+          "36c5b0e499a68ac2493a497bdab9740fd3e7027730c26a9094eca47268a27863",
+        payloadBytes: 3523396,
+        recordsSent: 3524,
         dataRetries: 0,
         finishAckReceived: true,
         preflightFirmware: "2.2.6.10",
         postflightFirmware: "2.2.6.10",
         hardware: 5,
-        acceptedBytes: 3539474,
-        expectedSequence: 3540,
+        acceptedBytes: 3523396,
+        expectedSequence: 3524,
         templeTxCount: 3545,
         templeRxCount: 10,
         templeUartErrors: 0,
@@ -469,7 +294,7 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
       webFlasherBuild: "6454760",
       route: "right",
       sourceFirmware: "2.2.6.10",
-      targetFirmware: "2.2.6.10 CFW",
+      targetFirmware: "2.2.6.10",
       targetBytes: 3539474,
       attempts: Object.freeze([
         Object.freeze({
@@ -553,10 +378,12 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
       policy:
         "Register 8 is a per-Case persistent identity byte, so profiles verify the protocol rather than enumerated devices or values: any register-8 variant proven by immutable retained zero-write/zero-transmission evidence whose other nine baseline bytes exactly match a patchable reviewed seated-idle entry derives its own bridges from the reviewed pinned build by patching only the four baseline-table register-8 offsets. Structural deviations - the never-patched 0x8d entry, a non-ff terminator, any other byte change - remain fail-closed, and no profile is ever selected from a Case or Smart Glasses serial number.",
     }),
-    browserDifferenceCfwTest: Object.freeze({
-      mode: "Stock-to-reviewed-CFW component differences",
-      imageSha256: LEGACY_HARDWARE_TESTED_CFW.sha256,
-      mainPayloadSha256: LEGACY_HARDWARE_TESTED_CFW.mainPayloadSha256,
+    browserDifferenceTest: Object.freeze({
+      mode: "official-firmware component comparison",
+      imageSha256:
+        "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
+      mainPayloadSha256:
+        "36c5b0e499a68ac2493a497bdab9740fd3e7027730c26a9094eca47268a27863",
       identicalComponentsSkipped: 5,
       changedComponentsTransferred: 1,
       differingBytePositions: 16117,
@@ -689,7 +516,7 @@ export const POGO_TRANSFER_RESEARCH = Object.freeze({
         "require checksum-valid version liveness from every restored route",
       ]),
       provenanceBoundary:
-        "The version reply proves post-reset application liveness only; exact image hashes remain the stock/CFW provenance.",
+        "The version reply proves post-reset application liveness only; exact image identity remains bound to the pinned official package hash.",
     }),
   }),
   webWriterEnabled: true,
@@ -706,7 +533,7 @@ export const OFFICIAL_G2_SHA256 = Object.freeze({
   "2.1.1.12": "75ca2a401f813cf23f864106f4dedbc7e00c4c4b37cd50dcf17f7e9fe503c63e",
   "2.2.0.24": "b3b0e213f7eb9568c97603a011b4a0261f9a4dbf9f7c933ff16b25aeb7efe0a6",
   "2.2.4.34": "f9a93621a7141e0ae54ca6371cd2f1b4afbffa61f302ace096e0656ba25b1754",
-  "2.2.6.10": REVIEWED_CFW.baseSha256,
+  "2.2.6.10": "f4dfb0b49ad3de3c2daf17f8a27a157c3dc98411d6a0d3ab2cfd0918f41b9afa",
   "2.2.7.14": "0fced0aebcc6c88db6f76dba34f91b805d842a5fc297bfd7fa6d6a34ec83cecb",
   "2.2.8.4": "df7b8bd18727765eba73be5ab836e0ee4cfd17b5e680046003b8d608d2fbfda7",
   "2.2.9.22": "a03fbea9f68a9de6bc271daabb9f3a41c59053d1086622c76a4e990f829cc561",
@@ -1027,27 +854,6 @@ export function parseMainOTAPreamble(payload) {
 
 export function classifyG2Firmware(fileSha256) {
   const digest = fileSha256.toLowerCase();
-  const reviewed = [
-    REVIEWED_G2FLASH_CFW_2_2_6_11,
-    REVIEWED_CFW_2_2_8_10,
-    REVIEWED_CFW_2_2_8_9,
-    REVIEWED_CFW_2_2_8_8,
-    REVIEWED_CFW_2_2_8_7,
-    REVIEWED_CFW_2_2_7_16,
-    REVIEWED_CFW,
-  ].find(
-    (release) => release.sha256 === digest,
-  );
-  if (reviewed) {
-    return {
-      channel: "custom",
-      trust: "reviewed-custom",
-      label: `Reviewed CFW · stock ${reviewed.baseVersion} base`,
-      version: reviewed.version,
-      baseVersion: reviewed.baseVersion,
-      capabilities: reviewed.capabilities,
-    };
-  }
   const official = Object.entries(OFFICIAL_G2_SHA256).find(
     ([, sha256]) => sha256 === digest,
   );

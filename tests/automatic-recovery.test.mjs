@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  canFallbackDifferentialToComplete,
   DEFAULT_AUTOMATIC_CASE_UPDATE,
   DEFAULT_AUTOMATIC_INSTALL_MODE,
   DEFAULT_INTERFACE_MODE,
@@ -24,7 +23,7 @@ import {
 } from "../src/lib/automaticRecovery.js";
 
 const STOCK_SHA = "a".repeat(64);
-const CFW_SHA = "b".repeat(64);
+const TARGET_SHA = "b".repeat(64);
 const firmware = (sha) => ({
   fileSha256: sha,
   templeFlashEligible: true,
@@ -34,7 +33,7 @@ test("Automatic Apply rejects a revoked firmware before planning a write", () =>
   const plan = resolveAutomaticApplyPlan({
     installMode: "restore",
     targetFirmware: {
-      ...firmware(CFW_SHA),
+      ...firmware(TARGET_SHA),
       firmwareRevocation: {
         version: "2.2.8.10",
         reason: "BLE advertised-name hook caused loss of Bluetooth discovery",
@@ -236,7 +235,7 @@ const differencePlan = {
     version: "2.2.6.10",
   },
   target: {
-    imageSha256: CFW_SHA,
+    imageSha256: TARGET_SHA,
     mainSha256: "d".repeat(64),
     version: "2.2.6.11",
   },
@@ -246,7 +245,7 @@ const differencePlan = {
     sparseByteRangesSupported: false,
   },
   verification: {
-    targetBundleSha256: CFW_SHA,
+    targetBundleSha256: TARGET_SHA,
     targetMainSha256: "d".repeat(64),
     targetMainBytes: 1234,
     finishAcknowledgementRequired: true,
@@ -980,38 +979,39 @@ test("Restore always plans a complete bilateral rewrite", () => {
   );
 });
 
-test("Update accepts the exact full-component pair with live compatibility proof", () => {
+test("Update ignores legacy comparison inputs and selects a complete official image", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: {},
     differenceSourceFirmware: firmware(STOCK_SHA),
     differencePlan,
     observedTempleVersions: observedBoth("2.2.6.10"),
   });
   assert.equal(result.executable, true);
-  assert.equal(result.sourceProofMode, "live-compatible-pair-preflight");
-  assert.match(result.reason, /just-in-time checksum-valid/i);
+  assert.equal(result.sourceProofMode, "complete-target-main");
+  assert.equal(result.flashMode, "complete");
+  assert.match(result.reason, /complete pinned official Apollo main/i);
 });
 
-test("Update prefers bilateral source-audit proof when available", () => {
+test("Update keeps complete-image mode when source-audit proof is available", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: both(STOCK_SHA),
     differenceSourceFirmware: firmware(STOCK_SHA),
     differencePlan,
   });
   assert.equal(result.executable, true);
-  assert.equal(result.flashMode, "differences");
+  assert.equal(result.flashMode, "complete");
   assert.equal(result.route, "both");
-  assert.equal(result.sourceProofMode, "verified-source-audits");
+  assert.equal(result.sourceProofMode, "complete-target-main");
 });
 
 test("Update falls back to a complete main when the difference proof is unsafe", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: {},
     differenceSourceFirmware: firmware(STOCK_SHA),
     differencePlan: {
@@ -1024,54 +1024,54 @@ test("Update falls back to a complete main when the difference proof is unsafe",
   });
   assert.equal(result.executable, true);
   assert.equal(result.flashMode, "complete");
-  assert.match(result.reason, /complete pinned target Apollo main/i);
+  assert.match(result.reason, /complete pinned official Apollo main/i);
 });
 
 test("Update falls back to a complete main when no differential pair exists", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: {},
     observedTempleVersions: observedBoth("2.1.1.12"),
   });
   assert.equal(result.executable, true);
   assert.equal(result.flashMode, "complete");
   assert.equal(result.sourceProofMode, "complete-target-main");
-  assert.match(result.reason, /complete pinned target Apollo main/i);
+  assert.match(result.reason, /complete pinned official Apollo main/i);
 });
 
 test("Update falls back to a complete main for proof outside the reviewed pair", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: both("e".repeat(64)),
     differenceSourceFirmware: firmware(STOCK_SHA),
     differencePlan,
   });
   assert.equal(result.executable, true);
   assert.equal(result.flashMode, "complete");
-  assert.match(result.reason, /outside the exact reviewed/i);
+  assert.match(result.reason, /complete pinned official Apollo main/i);
 });
 
-test("Update uses a complete main from 2.1.1.12 instead of the Stock-CFW differential", () => {
+test("Update uses a complete main from 2.1.1.12 instead of the official-only differential", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
     targetFirmware: firmware(STOCK_SHA),
     installedProvenance: {},
-    differenceSourceFirmware: firmware(CFW_SHA),
+    differenceSourceFirmware: firmware(TARGET_SHA),
     differencePlan: reverseDifferencePlan,
     observedTempleVersions: observedBoth("2.1.1.12"),
   });
   assert.equal(result.executable, true);
   assert.equal(result.flashMode, "complete");
   assert.equal(result.sourceProofMode, "complete-target-main");
-  assert.match(result.reason, /2\.1\.1\.12.*complete pinned target Apollo main/i);
+  assert.match(result.reason, /complete pinned official Apollo main/i);
 });
 
 test("fresh 2.1.1.12 identity overrides stale saved Stock differential proof", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: both(STOCK_SHA),
     differenceSourceFirmware: firmware(STOCK_SHA),
     differencePlan,
@@ -1079,14 +1079,14 @@ test("fresh 2.1.1.12 identity overrides stale saved Stock differential proof", (
   });
   assert.equal(result.flashMode, "complete");
   assert.equal(result.sourceProofMode, "complete-target-main");
-  assert.match(result.reason, /2\.1\.1\.12.*complete pinned target Apollo main/i);
+  assert.match(result.reason, /complete pinned official Apollo main/i);
 });
 
 test("Update becomes reset-and-verify when both temples already prove target", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
-    installedProvenance: both(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
+    installedProvenance: both(TARGET_SHA),
   });
   assert.equal(result.executable, true);
   assert.equal(result.action, "verify-only");
@@ -1096,7 +1096,7 @@ test("Update sends no firmware when fresh bilateral versions already match the t
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
     targetFirmware: {
-      ...firmware(CFW_SHA),
+      ...firmware(TARGET_SHA),
       g2Version: "2.2.6.11",
     },
     installedProvenance: {},
@@ -1106,11 +1106,11 @@ test("Update sends no firmware when fresh bilateral versions already match the t
   assert.match(result.reason, /send no firmware bytes/i);
 });
 
-test("Update skips a live target-matching temple and differentially updates only the source side", () => {
+test("Update skips a live target-matching temple and completely updates only the source side", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
     targetFirmware: {
-      ...firmware(CFW_SHA),
+      ...firmware(TARGET_SHA),
       g2Version: "2.2.6.11",
     },
     installedProvenance: {},
@@ -1123,15 +1123,15 @@ test("Update skips a live target-matching temple and differentially updates only
   });
   assert.equal(result.action, "flash");
   assert.equal(result.route, "left");
-  assert.equal(result.flashMode, "differences");
-  assert.equal(result.sourceProofMode, "live-compatible-pair-preflight");
+  assert.equal(result.flashMode, "complete");
+  assert.equal(result.sourceProofMode, "complete-target-main");
 });
 
 test("Update skips a live target-matching temple and completely updates only an unrelated side", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
     targetFirmware: {
-      ...firmware(CFW_SHA),
+      ...firmware(TARGET_SHA),
       g2Version: "2.2.6.11",
     },
     installedProvenance: {},
@@ -1146,25 +1146,22 @@ test("Update skips a live target-matching temple and completely updates only an 
   assert.match(result.reason, /left temple only/i);
 });
 
-test("USB transfer summary distinguishes semantic byte differences from wire bytes", () => {
+test("USB transfer summary reports complete-image wire bytes", () => {
   const summary = summarizeAutomaticApplyTransfer({
     plan: {
       executable: true,
       action: "flash",
       route: "left",
-      flashMode: "differences",
+      flashMode: "complete",
       reason: "test",
     },
     targetFirmware: {
       mainComponent: { payload: new Uint8Array(3_500_000) },
     },
-    differencePlan: {
-      mainDifferences: { changedBytes: 20_249 },
-    },
   });
   assert.deepEqual(summary.routes, ["left"]);
   assert.deepEqual(summary.skippedRoutes, ["right"]);
-  assert.equal(summary.semanticChangedBytes, 20_249);
+  assert.equal(summary.semanticChangedBytes, null);
   assert.equal(summary.firmwareBytes, 3_500_000);
   assert.equal(summary.sparseByteRangesSupported, false);
   assert.match(summary.protocolBoundary, /no destination-offset field/i);
@@ -1193,10 +1190,10 @@ test("fresh temple identity overrides stale saved target provenance", () => {
   const result = resolveAutomaticApplyPlan({
     installMode: "update",
     targetFirmware: {
-      ...firmware(CFW_SHA),
+      ...firmware(TARGET_SHA),
       g2Version: "2.2.6.11",
     },
-    installedProvenance: both(CFW_SHA),
+    installedProvenance: both(TARGET_SHA),
     observedTempleVersions: observedBoth("2.1.1.12"),
   });
   assert.equal(result.action, "flash");
@@ -1207,11 +1204,11 @@ test("fresh temple identity overrides stale saved target provenance", () => {
 test("only a fully verified successful audit records installed provenance", () => {
   const audit = {
     outcome: "success",
-    imageSha256: CFW_SHA,
+    imageSha256: TARGET_SHA,
     installedIdentity: {
       channel: "custom",
       reportedVersion: "2.2.6.11",
-      displayVersion: "2.2.6.11 CFW",
+      displayVersion: "2.2.6.11 experimental",
     },
     routes: ["right", "left"],
     finishedAt: "2026-07-26T00:00:00.000Z",
@@ -1228,18 +1225,18 @@ test("only a fully verified successful audit records installed provenance", () =
   ]);
   assert.deepEqual(mergeInstalledProvenance({}, audit), {
     right: {
-      imageSha256: CFW_SHA,
+      imageSha256: TARGET_SHA,
       channel: "custom",
       reportedVersion: "2.2.6.11",
-      displayVersion: "2.2.6.11 CFW",
+      displayVersion: "2.2.6.11 experimental",
       provenAt: "2026-07-26T00:00:00.000Z",
       proof: "verified-recovery-audit",
     },
     left: {
-      imageSha256: CFW_SHA,
+      imageSha256: TARGET_SHA,
       channel: "custom",
       reportedVersion: "2.2.6.11",
-      displayVersion: "2.2.6.11 CFW",
+      displayVersion: "2.2.6.11 experimental",
       provenAt: "2026-07-26T00:00:00.000Z",
       proof: "verified-recovery-audit",
     },
@@ -1260,12 +1257,12 @@ test("a failed audit retains a route whose own install fully verified", () => {
   const merged = mergeInstalledProvenance(both(STOCK_SHA), {
     outcome: "failed_or_uncertain",
     routes: ["right", "left"],
-    imageSha256: CFW_SHA,
+    imageSha256: TARGET_SHA,
     finishedAt: "2026-07-27T23:59:59.000Z",
     installedIdentity: {
       channel: "custom",
       reportedVersion: "2.2.6.10",
-      displayVersion: "2.2.6.10 CFW",
+      displayVersion: "2.2.6.10 experimental",
     },
     routeResults: [
       {
@@ -1279,10 +1276,10 @@ test("a failed audit retains a route whose own install fully verified", () => {
   });
   assert.deepEqual(merged, {
     right: {
-      imageSha256: CFW_SHA,
+      imageSha256: TARGET_SHA,
       channel: "custom",
       reportedVersion: "2.2.6.10",
-      displayVersion: "2.2.6.10 CFW",
+      displayVersion: "2.2.6.10 experimental",
       provenAt: "2026-07-27T23:59:59.000Z",
       proof: "route-verified-interrupted-audit",
     },
@@ -1293,7 +1290,7 @@ test("a failed audit does not retain a route with an unverified Case restore", (
   const merged = mergeInstalledProvenance(both(STOCK_SHA), {
     outcome: "failed_or_uncertain",
     routes: ["right", "left"],
-    imageSha256: CFW_SHA,
+    imageSha256: TARGET_SHA,
     installedIdentity: { channel: "custom", reportedVersion: "2.2.6.10" },
     routeResults: [
       {
@@ -1311,10 +1308,10 @@ test("a failed audit does not retain a route with an unverified Case restore", (
 test("update flashes only the unproven route when the other is target-proven", () => {
   const plan = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: {
       right: {
-        imageSha256: CFW_SHA,
+        imageSha256: TARGET_SHA,
         proof: "route-verified-interrupted-audit",
       },
     },
@@ -1332,9 +1329,9 @@ test("update flashes only the unproven route when the other is target-proven", (
 test("update rewrites both routes when the proven route contradicts observation", () => {
   const plan = resolveAutomaticApplyPlan({
     installMode: "update",
-    targetFirmware: { ...firmware(CFW_SHA), g2Version: "2.2.6.11" },
+    targetFirmware: { ...firmware(TARGET_SHA), g2Version: "2.2.6.11" },
     installedProvenance: {
-      right: { imageSha256: CFW_SHA },
+      right: { imageSha256: TARGET_SHA },
     },
     differenceSourceFirmware: null,
     differencePlan: null,
@@ -1363,12 +1360,12 @@ test("automatic Restore invokes one complete bilateral session", async () => {
     [
       firmware(STOCK_SHA),
       "both",
-      { mode: "complete", differenceSourceFirmware: null },
+      { mode: "complete" },
     ],
   ]);
 });
 
-test("automatic Update invokes the reviewed bilateral difference session", async () => {
+test("automatic Update invokes the complete bilateral official session", async () => {
   const calls = [];
   const source = firmware(STOCK_SHA);
   await executeAutomaticApply({
@@ -1379,81 +1376,23 @@ test("automatic Update invokes the reviewed bilateral difference session", async
       },
     },
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: both(STOCK_SHA),
     differenceSourceFirmware: source,
     differencePlan,
   });
   assert.deepEqual(calls, [
     [
-      firmware(CFW_SHA),
+      firmware(TARGET_SHA),
       "both",
       {
-        mode: "differences",
-        differenceSourceFirmware: source,
-        sourceProofMode: "verified-source-audits",
+        mode: "complete",
       },
     ],
   ]);
 });
 
-test("differential fallback requires proof that preflight changed no firmware bytes", () => {
-  const plan = {
-    flashMode: "differences",
-    sourceVersion: "2.2.6.10",
-  };
-  const error = Object.assign(new Error("source mismatch"), {
-    audit: safePreflightFailureAudit(),
-  });
-  assert.equal(canFallbackDifferentialToComplete(error, plan), true);
-
-  error.audit.routeResults[0].acceptedFirmwareBytes = 1;
-  assert.equal(canFallbackDifferentialToComplete(error, plan), false);
-
-  error.audit = safePreflightFailureAudit();
-  error.audit.finalResetAndLiveness.resetConfirmed = false;
-  assert.equal(canFallbackDifferentialToComplete(error, plan), false);
-
-  error.audit = safePreflightFailureAudit();
-  error.audit.routeComponentRestartAttempts.push({
-    acceptedFirmwareBytes: 1000,
-  });
-  assert.equal(canFallbackDifferentialToComplete(error, plan), false);
-});
-
-test("differential fallback accepts a fully transferred image only after clean boot-recovery proof", () => {
-  const plan = {
-    flashMode: "differences",
-    sourceVersion: "2.2.6.10",
-  };
-  const error = Object.assign(new Error("postflight liveness failed"), {
-    audit: safePostflightFailureAudit(),
-  });
-  assert.equal(canFallbackDifferentialToComplete(error, plan), true);
-
-  error.audit.finalResetAndLiveness.resetConfirmed = false;
-  assert.equal(canFallbackDifferentialToComplete(error, plan), false);
-
-  error.audit = safePostflightFailureAudit();
-  error.audit.routeResults[0].failureStage = "DATA:1";
-  assert.equal(canFallbackDifferentialToComplete(error, plan), false);
-
-  error.audit = safePostflightFailureAudit();
-  error.audit.routeResults[0].transfer.payloadBytesSent = 1000;
-  assert.equal(canFallbackDifferentialToComplete(error, plan), false);
-
-  error.audit = safePostflightFailureAudit();
-  error.audit.routeResults = ["right", "left"].map((route) => ({
-    ...error.audit.routeResults[0],
-    route,
-    outcome: "success",
-    failureStage: undefined,
-  }));
-  error.audit.finalResetAndLiveness.versions.left.firmware = "2.2.6.11";
-  assert.equal(canFallbackDifferentialToComplete(error, plan), true);
-});
-
-test("automatic Update safely retries a stale differential plan with the complete main", async () => {
+test("automatic Update never starts a legacy differential plan", async () => {
   const calls = [];
   const recoveries = [];
   let resetCalls = 0;
@@ -1463,7 +1402,7 @@ test("automatic Update safely retries a stale differential plan with the complet
     session: {
       flashPinnedTempleMain: async (...args) => {
         calls.push(args);
-        if (calls.length === 1) {
+        if (args[2].mode === "differences") {
           throw Object.assign(new Error("live source mismatch"), {
             audit: safePreflightFailureAudit(),
           });
@@ -1480,35 +1419,26 @@ test("automatic Update safely retries a stale differential plan with the complet
       },
     },
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: both(STOCK_SHA),
     differenceSourceFirmware: source,
     differencePlan,
     onRecovery: (recovery) => recoveries.push(recovery),
   });
 
-  assert.equal(calls.length, 2);
-  assert.equal(resetCalls, 1);
-  assert.equal(calls[0][2].mode, "differences");
-  assert.deepEqual(calls[1], [
-    firmware(CFW_SHA),
+  assert.equal(calls.length, 1);
+  assert.equal(resetCalls, 0);
+  assert.deepEqual(calls[0], [
+    firmware(TARGET_SHA),
     "both",
-    { mode: "complete", differenceSourceFirmware: null },
+    { mode: "complete" },
   ]);
-  assert.equal(result.initialPlan.flashMode, "differences");
   assert.equal(result.plan.flashMode, "complete");
-  assert.equal(
-    result.audit.automaticFallback.kind,
-    "differential-to-complete",
-  );
-  assert.equal(recoveries[0].observedVersion, "2.1.1.12");
-  assert.equal(
-    recoveries[0].trigger,
-    "source-preflight-mismatch",
-  );
+  assert.equal(result.initialPlan, undefined);
+  assert.deepEqual(recoveries, []);
 });
 
-test("automatic Update resets and retries the complete main after a recovered differential boot failure", async () => {
+test("automatic Update goes directly to the complete main", async () => {
   const steps = [];
   const recoveries = [];
   const successfulAudit = { outcome: "success" };
@@ -1534,36 +1464,21 @@ test("automatic Update resets and retries the complete main after a recovered di
       },
     },
     installMode: "update",
-    targetFirmware: firmware(CFW_SHA),
+    targetFirmware: firmware(TARGET_SHA),
     installedProvenance: both(STOCK_SHA),
     differenceSourceFirmware: source,
     differencePlan,
     onRecovery: (recovery) => recoveries.push(recovery),
   });
 
-  assert.deepEqual(steps, [
-    "flash:differences",
-    "reset",
-    "flash:complete",
-  ]);
-  assert.equal(
-    recoveries[0].trigger,
-    "postflight-boot-liveness-failure",
-  );
-  assert.deepEqual(recoveries[0].failedRoutes, ["right", "left"]);
-  assert.equal(result.initialPlan.flashMode, "differences");
+  assert.deepEqual(steps, ["flash:complete"]);
+  assert.deepEqual(recoveries, []);
+  assert.equal(result.initialPlan, undefined);
   assert.equal(result.plan.flashMode, "complete");
-  assert.equal(
-    result.audit.automaticFallback.outcome,
-    "complete-success",
-  );
-  assert.equal(
-    result.audit.automaticFallback.trigger,
-    "postflight-boot-liveness-failure",
-  );
+  assert.equal(result.audit, successfulAudit);
 });
 
-test("automatic Update does not start the complete fallback when the recovery reset cannot prove liveness", async () => {
+test("automatic Update surfaces a complete-image failure without a legacy fallback", async () => {
   const modes = [];
   const source = firmware(STOCK_SHA);
   await assert.rejects(
@@ -1580,14 +1495,14 @@ test("automatic Update does not start the complete fallback when the recovery re
         },
       },
       installMode: "update",
-      targetFirmware: firmware(CFW_SHA),
+      targetFirmware: firmware(TARGET_SHA),
       installedProvenance: both(STOCK_SHA),
       differenceSourceFirmware: source,
       differencePlan,
     }),
-    /complete-image fallback was not started/i,
+    /postflight liveness failed/i,
   );
-  assert.deepEqual(modes, ["differences"]);
+  assert.deepEqual(modes, ["complete"]);
 });
 
 test("automatic Update invokes a complete bilateral session for 2.1.1.12", async () => {
@@ -1602,7 +1517,7 @@ test("automatic Update invokes a complete bilateral session for 2.1.1.12", async
     installMode: "update",
     targetFirmware: firmware(STOCK_SHA),
     installedProvenance: {},
-    differenceSourceFirmware: firmware(CFW_SHA),
+    differenceSourceFirmware: firmware(TARGET_SHA),
     differencePlan: reverseDifferencePlan,
     observedTempleVersions: observedBoth("2.1.1.12"),
   });
@@ -1610,7 +1525,7 @@ test("automatic Update invokes a complete bilateral session for 2.1.1.12", async
     [
       firmware(STOCK_SHA),
       "both",
-      { mode: "complete", differenceSourceFirmware: null },
+      { mode: "complete" },
     ],
   ]);
 });
@@ -1628,10 +1543,10 @@ test("automatic Update already at target performs reset-only verification", asyn
     },
     installMode: "update",
     targetFirmware: {
-      ...firmware(CFW_SHA),
+      ...firmware(TARGET_SHA),
       g2Version: "2.2.6.11",
     },
-    installedProvenance: both(CFW_SHA),
+    installedProvenance: both(TARGET_SHA),
   });
   assert.equal(resetCalls, 1);
   assert.equal(resetOptions.expectedVersion, "2.2.6.11");
@@ -1666,10 +1581,10 @@ test("automatic Update reuses the fresh matching preflight instead of resetting 
     },
     installMode: "update",
     targetFirmware: {
-      ...firmware(CFW_SHA),
+      ...firmware(TARGET_SHA),
       g2Version: "2.2.6.11",
     },
-    installedProvenance: both(CFW_SHA),
+    installedProvenance: both(TARGET_SHA),
     observedTempleVersions: observedBoth("2.2.6.11"),
     verifiedTempleReadiness: readiness,
   });
